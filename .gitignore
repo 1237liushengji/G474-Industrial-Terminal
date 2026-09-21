@@ -1,0 +1,30 @@
+# ===== Keil MDK 构建产物 =====
+*.o
+*.d
+*.crf
+*.axf
+*.htm
+*_build_log.htm
+*.lnp
+*.map
+*.dep
+*.iex
+*.sct
+DebugConfig/
+Objects/
+Listings/
+RTE/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+Tools/python/results/
+
+# ===== Node =====
+node_modules/
+
+# ===== OS / 编辑器 =====
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
