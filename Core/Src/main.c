@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief          : Main program body
+  * @brief          : Main program body - single firmware image for both roles
   ******************************************************************************
   * @attention
   *
@@ -22,13 +22,16 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "led.h"
 #include "app_board_cfg.h"
+#include "bsp_led.h"
+#include "bsp_iwdg.h"
 #include "bsp_tick.h"
-#if (MODBUS_NODE_ROLE == NODE_ROLE_MASTER)
-#include "master_main.h"
+#include "can_drv.h"
+#include "isotp.h"
+#if ROLE_IS_GW
+#include "mb_master_port.h"
 #else
-#include "slave_main.h"
+#include "node_app.h"
 #endif
 /* USER CODE END Includes */
 
@@ -67,10 +70,14 @@ void SystemClock_Config(void);
 /**
   * @brief  The application entry point.
   * @retval int
+  *
+  * Both roles are built from this one file.  The role, the form factor and
+  * every pin come from App/app_board_cfg.h via the Keil target's Define field:
+  *   A_GW_M1 / A_GW_M2   : NODE_ROLE=0   (Modbus master + uplink)
+  *   B_NODE_M1 / B_NODE_M2: NODE_ROLE=1  (Modbus slave + local HMI)
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -97,14 +104,30 @@ int main(void)
   LED_Init();
   BSP_Tick_Init();
 
-#if (MODBUS_NODE_ROLE == NODE_ROLE_MASTER)
-  Master_Main();     /* A board: master loop (never returns) */
+  /* CAN backbone: FDCAN1 on PD0/PD1.  Its low-level init lives in
+   * Core/Src/stm32g4xx_hal_msp.c (HAL_FDCAN_MspInit) because HAL_FDCAN_Init
+   * depends on that callback - it is the one peripheral that does not follow
+   * the "BSP self-init" convention used by the USART/SPI/I2C drivers. */
+  if (CAN_Init() != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* Watchdog last, so that init time does not eat into the timeout budget.
+   * From here on the role main loop owns BSP_IWDG_Refresh(). */
+  if (BSP_IWDG_Init() != 0)
+  {
+    Error_Handler();
+  }
+
+#if ROLE_IS_GW
+  Master_Main();     /* Gateway: Modbus master; M2 adds the MQTT uplink. Never returns. */
 #else
-  Slave_Main();      /* B board: slave loop (never returns) */
+  Slave_Main();      /* Node: Modbus slave + local HMI + parameter storage. Never returns. */
 #endif
   /* USER CODE END 2 */
 
-  /* Infinite loop - unreachable when role main runs */
+  /* Infinite loop - unreachable when the role main runs */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
@@ -130,6 +153,11 @@ void SystemClock_Config(void)
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
+  *
+  * HSE 8 MHz -> PLL /M=2 -> 4 MHz -> xN=75 -> 300 MHz -> /R=2 -> 150 MHz.
+  * Both APB1 and APB2 run at 150 MHz.  This clock tree is what every derived
+  * figure in app_board_cfg.h and docs/04 §7 is based on - changing it
+  * invalidates the FDCAN bit timing, the USART BRR value and the SPI divider.
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
@@ -171,7 +199,8 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /* When the watchdog is already running this becomes a controlled reset loop
+   * rather than a hang - which is the intended behaviour for both roles. */
   __disable_irq();
   while (1)
   {

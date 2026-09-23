@@ -1,4 +1,6 @@
 # ===== Keil MDK 构建产物 =====
+# 四 Target 的输出目录（见 MDK-ARM/G474.uvprojx 的 OutputDirectory）
+build/
 *.o
 *.d
 *.crf

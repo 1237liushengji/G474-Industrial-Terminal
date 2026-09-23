@@ -15,6 +15,9 @@
 #include "mb_master_port.h"
 
 #include "bsp_led.h"
+#include "bsp_iwdg.h"
+#include "can_drv.h"
+#include "isotp.h"
 #include "bsp_rs485.h"
 #include "bsp_uart.h"
 #include "bsp_tick.h"
@@ -141,6 +144,14 @@ void Master_Main(void)
 
     while (1)
     {
+        /* CAN backbone housekeeping + watchdog.
+         * CAN_Task() drives bus-off exponential backoff and drains the
+         * TX-event confirmations; IsoTp_Task() paces the snapshot
+         * transport (STmin / N_Bs / N_Cr).  Both are non-blocking. */
+        CAN_Task();
+        IsoTp_Task();
+        BSP_IWDG_Refresh();
+
         if (!MB_Master_IsBusy())
         {
             if ((HAL_GetTick() - s_poll_last_ms) >= POLL_PERIOD_MS)

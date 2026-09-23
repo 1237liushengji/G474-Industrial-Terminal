@@ -19,15 +19,21 @@
 #include "main.h"   /* HAL handle types, GPIO symbols */
 
 /*==========================================================================*/
-/* 0. Migration guard - DO NOT FLASH until v0.1 is finished                  */
+/* 0. Wiring notice - read before the first flash of this firmware           */
 /*==========================================================================*/
-/* Remaining v0.1 work: bsp_w25q128.c -> SPI2; hal_conf union; msp.c/it.c ->
- * FDCAN1 + USART2; main.c merge FDCAN/IWDG init; new Common/bsp_printf.c;
- * merge BSP/bsp_led; build 4 Keil targets.  Delete both lines below when done.*/
-#define V01_MIGRATION_INCOMPLETE   1
-#if (V01_MIGRATION_INCOMPLETE == 1)
-#warning "v0.1 migration incomplete: pin macros are already final but some drivers still point at the old peripherals - DO NOT FLASH."
-#endif
+/* v0.1 is code-complete (all four Keil targets build clean), but the BOARD
+ * WIRING must be moved to match the new pin map before anything will talk:
+ *
+ *   CAN transceiver : PB12/PB13  ->  PD0/PD1   (J1 pins 19/20)
+ *   RS485 module    : PB10/PB11  ->  PD5/PD6   (J1 pins 24/25)
+ *   ESP-12F         : stays on PB10/PB11       (J2 pins 20/17)
+ *
+ * The RS485/WiFi jumper conflict disappears with this move - they no longer
+ * share pins.  Sequence and rationale: docs/07 section 9.
+ *
+ * Still not compiled in (deliberately deferred to v0.2, files are present in
+ * the tree but not in the Keil file lists): Common/console.c and its USART1
+ * console UART + printf layer, and Protocol/uds.c which depends on it. */
 
 /*==========================================================================*/
 /* 1. Node role / form factor (injected by Keil target Define - do not edit)  */
@@ -160,9 +166,10 @@
 
 #define RS485_DEFAULT_BAUDRATE   115200UL
 #define RS485_DEFAULT_SLAVE_ID   1u
-#define MB_TIMEOUT_MS            100u       /* as in the original master_main.c */
-#define MB_RETRY_MAX             2u         /* 3 attempts total */
-#define POLL_PERIOD_MS           500u
+/* MB_TIMEOUT_MS / MB_RETRY_MAX / POLL_PERIOD_MS stay owned by the application
+ * layer for now.  The app currently spells them MASTER_TIMEOUT_MS /
+ * MASTER_RETRY_MAX / POLL_PERIOD_MS in App/mb_master_port.c; unifying the
+ * names is a v0.4 task (docs/06 conflict #6). */
 
 /*==========================================================================*/
 /* 4. ESP-12F (WiFi / MQTT uplink) - USART3 on PB10(TX) / PB11(RX), AF7       */
@@ -239,7 +246,7 @@
 #define EEPROM_GPIO_CLK_ENABLE() do { __HAL_RCC_GPIOA_CLK_ENABLE(); \
                                       __HAL_RCC_GPIOB_CLK_ENABLE(); } while (0)
 #define EEPROM_GPIO_AF           GPIO_AF4_I2C1
-#define EEPROM_DEV_ADDR          0xA0u
+/* EEPROM_DEV_ADDR stays owned by BSP/bsp_eeprom.c */
 
 /*==========================================================================*/
 /* 8. LCD (bit-banged SPI TFT)                                               */
@@ -275,8 +282,9 @@
 #define KEY_K1_PORT              GPIOA
 #define KEY_K1_PIN               GPIO_PIN_3
 #define KEY_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOA_CLK_ENABLE()
-#define KEY_DEBOUNCE_MS          20u
-#define KEY_LONG_MS              1000u
+/* KEY_DEBOUNCE_MS / KEY_LONG_MS stay owned by BSP/bsp_key.c (v0.1 keeps
+ * module-local tunables where they already live; centralising them here is
+ * a follow-up, not a restructure). */
 
 #define LED_PORT                 GPIOE
 #define LED1_PIN                 GPIO_PIN_0    /* blue */
@@ -305,20 +313,30 @@
 #define BACKFILL_BURST           8u
 
 /*==========================================================================*/
-/* 11. Storage quotas                                                        */
+/* 11. Storage sizing - deliberately NOT here                               */
 /*==========================================================================*/
-/* On-board 16 MB confirmed -> log area raised 64 KB to 256 KB:
- * 32 B records -> 8192 entries, about 105 min of offline buffering
- * (about 52 min with the 50/50 event/pending split). */
-#define LOG_AREA_SIZE            (256UL * 1024UL)
-#define LOG_QUOTA_EVENT          2048u
-#define LOG_QUOTA_PENDING        2048u
-#define LOG_CACHE_CAP            128u       /* down from 512; reclaims 12 KB RAM */
+/* The log/flash sizing (LOG_AREA_SIZE, LOG_RECORD_SIZE, LOG_SECTOR_*,
+ * LOG_MAX_RECORDS, LOG_CACHE_CAP) stays owned by the Storage module, where it
+ * is already a self-consistent derived chain in Storage/log.c and log.h.
+ *
+ * The board audit raised two tempting changes that are deliberately NOT part
+ * of v0.1, because v0.1 is a restructure and must not alter behaviour:
+ *   - LOG_AREA_SIZE 64 KB -> 256 KB (4x offline buffer; the on-board 16 MB
+ *     allows it).  Would grow the BLOCKING power-up scan from about 0.55 s to
+ *     about 2.2 s, and that scan currently runs before RS485 init.  Do it in
+ *     v0.2 together with moving the scan into its own task.
+ *   - LOG_CACHE_CAP 512 -> 128 (would reclaim 12 KB of RAM).  Changes how far
+ *     back LOG_Read() can reach, so it has to land together with the per-seq
+ *     flash read API (v0.6) and the FreeRTOS RAM budget (v0.2).
+ * See docs/07 section 7 and docs/02 decision 6. */
 
 /*==========================================================================*/
 /* 12. Tasks and watchdog (effective once FreeRTOS lands in v0.2)             */
 /*==========================================================================*/
 #define IWDG_PRESCALER           IWDG_PRESCALER_32
-#define IWDG_RELOAD              2000u       /* 32 kHz/32 = 1 kHz -> 2000 = 2 s */
+/* 32 kHz/32 = 1 kHz timebase.  Kept at the CAN v3.0 value of 3 s: the longest
+ * legitimate blocking section is a flash sector erase (worst case 400 ms), and
+ * that margin was never tightened on hardware.  See docs/05 A-14. */
+#define IWDG_RELOAD              3000u
 
 #endif /* __APP_BOARD_CFG_H */
