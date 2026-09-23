@@ -135,6 +135,12 @@
 #define RS485_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOD_CLK_ENABLE()
 #define RS485_GPIO_AF            GPIO_AF7_USART2
 
+/* DMA, used only when RS485_RX_MODE == 1.  On G4 any DMA1 channel can serve
+ * any request via DMAMUX, so the channel stays put and only the request line
+ * changes together with the USART instance. */
+#define RS485_DMA_INSTANCE       DMA1_Channel2
+#define RS485_DMA_REQUEST        DMA_REQUEST_USART2_RX
+
 /* RX path: 0 = RXNE byte-wise interrupt (the only mode verified on hardware)
  *          1 = DMA circular + IDLE                                         */
 #ifndef RS485_RX_MODE

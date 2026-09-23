@@ -126,7 +126,7 @@ void LOG_Init(void)
     uint32_t off = 0U;
     log_record_t rec;
 
-    if (W25Q_ReadID() == 0U)
+    if ((W25Q_ReadID() == 0U) || (W25Q_IsPresent() == 0U))
     {
         s_ready = 0U;
         return;

@@ -12,14 +12,14 @@
   *  bank -> auto-saved to 24C02 by the config layer.
   ******************************************************************************
   */
-#include "slave_main.h"
+#include "node_app.h"
 
 #include <string.h>
-#include "led.h"
+#include "bsp_led.h"
 #include "bsp_rs485.h"
 #include "bsp_uart.h"
 #include "bsp_tick.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 #include "bsp_lcd.h"
 #include "bsp_key.h"
 #include "bsp_w25q128.h"

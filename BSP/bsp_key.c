@@ -8,7 +8,7 @@
   ******************************************************************************
   */
 #include "bsp_key.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 
 #define KEY_DEBOUNCE_MS   20U
 #define KEY_LONG_MS       1000U

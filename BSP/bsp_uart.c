@@ -23,7 +23,7 @@
   ******************************************************************************
   */
 #include "bsp_uart.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 #include "bsp_tick.h"
 #include "ring_buffer.h"
 
@@ -109,8 +109,8 @@ int32_t BSP_UART_Init(uint32_t baudrate)
     __HAL_RCC_DMA1_CLK_ENABLE();
     __HAL_RCC_DMAMUX1_CLK_ENABLE();
 
-    s_hdma.Instance = DMA1_Channel2;
-    s_hdma.Init.Request = DMA_REQUEST_USART3_RX;   /* DMAMUX req 28 */
+    s_hdma.Instance = RS485_DMA_INSTANCE;
+    s_hdma.Init.Request = RS485_DMA_REQUEST;
     s_hdma.Init.Direction = DMA_PERIPH_TO_MEMORY;
     s_hdma.Init.PeriphInc = DMA_PINC_DISABLE;
     s_hdma.Init.MemInc = DMA_MINC_ENABLE;

@@ -10,7 +10,7 @@
   ******************************************************************************
   */
 #include "bsp_eeprom.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 
 /* add EEPROM pins to the board config header namespace */
 #ifndef EEPROM_I2C

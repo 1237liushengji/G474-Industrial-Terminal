@@ -23,7 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "led.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 #include "bsp_tick.h"
 #if (MODBUS_NODE_ROLE == NODE_ROLE_MASTER)
 #include "master_main.h"

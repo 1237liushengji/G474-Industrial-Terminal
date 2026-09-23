@@ -1,8 +1,10 @@
 /**
   ******************************************************************************
   * @file    bsp_w25q128.h
-  * @brief   W25Q128JV SPI NOR flash driver (16 MB).
-  * @note    Pins: CS=PA4 SCK=PA5 MISO=PA6 MOSI=PA7 (SPI1, AF5)
+  * @brief   W25Q128JV SPI NOR flash driver (16 MB) - the ON-BOARD chip (U3).
+  * @note    Pins come from app_board_cfg.h: CS=PB12, SCK=PB13, MISO=PB14,
+  *          MOSI=PB15 (SPI2, AF5).  The chip is wired in plain SPI mode
+  *          (IO2/IO3 tied high), not QSPI.
   ******************************************************************************
   */
 #ifndef __BSP_W25Q128_H
@@ -14,11 +16,17 @@
 #define W25Q_PAGE_SIZE     256U
 #define W25Q_CAPACITY      (16UL * 1024UL * 1024UL)
 
-/** Init SPI1 + CS GPIO. Call once. @retval 0 ok, -1 error */
+/**
+  * @brief  Init SPI2 + CS GPIO and verify the JEDEC ID.
+  * @retval 0 ok, -1 SPI init failed, -2 JEDEC ID mismatch (driver goes inert)
+  */
 int32_t W25Q_Init(void);
 
 /** Read JEDEC ID (0x9F). @retval 24-bit ID, 0 on failure */
 uint32_t W25Q_ReadID(void);
+
+/** @retval 1 if the flash was successfully identified at init, else 0 */
+uint8_t W25Q_IsPresent(void);
 
 /** Read bytes. */
 void W25Q_Read(uint32_t addr, uint8_t *buf, uint32_t len);

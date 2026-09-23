@@ -1,13 +1,15 @@
 /**
   ******************************************************************************
   * @file    can.h
-  * @brief   双机CAN通信驱动（基于FDCAN2，经典CAN模式）
+  * @brief   Dual-node CAN driver (classic CAN, RX FIFO0 + interrupt line 0)
   *
   * 硬件平台：STM32G474VET6 开发板 + SN65HVD230 收发器模块
-  * 引脚分配（依据板卡丝印/引脚图：CAN_RX->PB12、CAN_TX->PB13）：
-  *           PB12 = FDCAN2_RX（AF9，接模块CTX/TXD引脚）
-  *           PB13 = FDCAN2_TX（AF9，接模块CRX/RXD引脚）
-  *           （PB12/PB13为G474的FDCAN2复用引脚，数据手册Table 13）
+  * 引脚：PD0 = FDCAN1_RX（AF9，接收发器 CTX/TXD）、
+  *       PD1 = FDCAN1_TX（AF9，接收发器 CRX/RXD）
+  *       （DS12288 Rev6 Table 13 Port D；实例与引脚均由 app_board_cfg.h
+  *        的 CAN_* 宏给出）
+  * 为什么不用 FDCAN2/PB12,PB13：那两个脚同时是板载 W25Q128 的 CS#/CLK，
+  * 只能二选一；本系统选择保住板载 Flash。见 docs/07 §4 C1。
   *
   * 位时序（500 kbit/s，采样点80%，与ST官方G474E-EVAL示例结构一致）：
   *           FDCAN内核时钟 = PCLK1 = 150 MHz
@@ -26,6 +28,7 @@
 #include "main.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include "app_board_cfg.h"
 
 #define CAN_APP_VERSION                "3.0.0"       /* 应用固件版本（version命令上报） */
 
@@ -33,23 +36,21 @@
  * 双机通信两个节点烧录不同固件：                                                          *
  *   板A（主节点）：周期发送命令帧，监视链路状态                                            *
  *   板B（从节点）：接收命令帧、翻转LED并应答                                              *
- * 使用方法：烧录板A固件时保持 CAN_NODE_ROLE = CAN_NODE_A；                                *
- *           烧录板B固件时改为 CAN_NODE_ROLE = CAN_NODE_B 后重新编译。                      */
-#define CAN_NODE_A                     0
-#define CAN_NODE_B                     1
-
-#define CAN_NODE_ROLE                  CAN_NODE_B    /* <-- 当前编译的节点角色 */
+ * 使用方法：板A（网关）与板B（采集节点）烧同一份代码，仅 Keil Target 的                       *
+ *           NODE_ROLE Define 不同（0=网关 / 1=节点）。                                       */
+/* 节点角色改由 App/app_board_cfg.h 的 NODE_ROLE 统一给出（Keil Target 注入）。
+ * 原 CAN_NODE_A / CAN_NODE_B / CAN_NODE_ROLE 已删除，避免第二处角色真相。 */
 
 /* 单板自测试（硬件排错用）：置1后FDCAN进入外部回环模式——本板发出的帧会被
  * 自己收到（0x321按从节点逻辑应答，0x322按主节点逻辑处理），单板即可完成
  * "LED同步闪烁"全流程。用于把固件问题与接线问题隔离开：
  * 自测试能同步闪烁 => 固件正常，问题在外部总线/收发器/接线。
- * 测试完毕必须改回0恢复双机正常模式！测试时CAN_NODE_ROLE须为CAN_NODE_A。 */
+ * 测试完毕必须改回0恢复双机正常模式！自测时须为网关角色（NODE_ROLE=0）。 */
 #define CAN_DEBUG_SELFTEST             0
 
 /*--------------------------------------- 总线参数 ---------------------------------------*/
-#define CAN_BITRATE                    500000U       /* 总线波特率 500 kbit/s（经典CAN） */
-#define CAN_LINK_TIMEOUT_MS            1500U         /* 链路超时判定时间（无报文视为断链） */
+/* CAN_BITRATE / CAN_LINK_TIMEOUT_MS 由 app_board_cfg.h 统一给出
+ * （本系统链路超时定为 3000 ms，以容纳 ISO-TP 快照传输）*/
 
 /*--------------------------------------- 应用层协议 --------------------------------------*
  * 命令帧（板A -> 板B）：标准ID 0x321，数据长度8字节
@@ -90,7 +91,7 @@ typedef struct
 } CAN_Stats;
 
 /*--------------------------------------- 外部变量 ---------------------------------------*/
-extern FDCAN_HandleTypeDef hfdcan2;
+extern FDCAN_HandleTypeDef hfdcan;
 
 /*--------------------------------------- 函数声明 ---------------------------------------*/
 HAL_StatusTypeDef CAN_Init(void);

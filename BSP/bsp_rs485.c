@@ -9,7 +9,7 @@
   */
 #include "bsp_rs485.h"
 #include "bsp_uart.h"
-#include "bsp_board_cfg.h"
+#include "app_board_cfg.h"
 
 /*====================================================================*/
 /* Local                                                                */

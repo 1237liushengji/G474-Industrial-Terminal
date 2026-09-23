@@ -20,6 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "app_board_cfg.h"
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
@@ -82,5 +83,64 @@ void HAL_MspInit(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+  * @brief FDCAN low-level init: kernel clock, GPIO alternate function, NVIC.
+  *        This is the ONE peripheral that is initialised through the MSP
+  *        rather than self-init, because HAL_FDCAN_Init() depends on it.
+  *        Every pin/instance value comes from app_board_cfg.h.
+  *        Reference: STM32G474E-EVAL FDCAN_Classic_Frame_Networking example.
+  */
+void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* fdcanHandle)
+{
+  GPIO_InitTypeDef         GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit   = {0};
+
+  if (fdcanHandle->Instance == CAN_PERIPH)
+  {
+    /* FDCAN kernel clock = PCLK1 = 150 MHz.  The bit timing in app_board_cfg.h
+     * is derived from exactly this clock, so do not change one without the
+     * other. */
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_FDCAN;
+    PeriphClkInit.FdcanClockSelection  = RCC_FDCANCLKSOURCE_PCLK1;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    CAN_GPIO_CLK_ENABLE();
+    CAN_CLK_ENABLE();
+
+    /* FDCAN1: PD0 = RX (to transceiver CTX), PD1 = TX (to transceiver CRX).
+     * AF9 per DS12288 Rev6 Table 13, Port D. */
+    GPIO_InitStruct.Pin       = CAN_RX_PIN | CAN_TX_PIN;
+    GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull      = GPIO_NOPULL;
+    GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = CAN_AF;
+    HAL_GPIO_Init(CAN_RX_GPIO_PORT, &GPIO_InitStruct);
+
+    /* Interrupt line 0.  NOTE: priority (1,0) is inherited from CAN v3.0 where
+     * it was verified on hardware.  v0.2 (FreeRTOS) MUST lower it to >= 5,
+     * i.e. below configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY, before any
+     * *FromISR call is made from this handler - see docs/04 §5. */
+    HAL_NVIC_SetPriority(CAN_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(CAN_IRQn);
+  }
+}
+
+/**
+  * @brief FDCAN low-level de-init.
+  */
+void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef* fdcanHandle)
+{
+  if (fdcanHandle->Instance == CAN_PERIPH)
+  {
+    __HAL_RCC_FDCAN_CLK_DISABLE();
+    HAL_GPIO_DeInit(CAN_RX_GPIO_PORT, CAN_RX_PIN | CAN_TX_PIN);
+    HAL_NVIC_DisableIRQ(CAN_IRQn);
+  }
+}
+
 
 /* USER CODE END 1 */

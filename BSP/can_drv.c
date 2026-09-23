@@ -1,13 +1,14 @@
 /**
   ******************************************************************************
   * @file    can.c
-  * @brief   双机CAN通信驱动实现（基于FDCAN2，经典CAN模式，RX FIFO0 + 中断线0）
+  * @brief   Dual-node CAN driver implementation (classic CAN, RX FIFO0 + IT0)
+  *          实例与引脚来自 app_board_cfg.h: FDCAN1 on PD0/PD1 (AF9)
   *
   * 设计说明（企业级要求）：
   *   1. 发送采用Tx FIFO（深度3），发送前查询剩余空间，不阻塞应用层；
   *      发送启用Tx Event FIFO（MessageMarker标记），中断里逐帧确认
   *      "已真正送达总线"并测量入队->确认延迟（txAckCount/txMaxLatencyMs）；
-  *   2. 接收采用RX FIFO0 + FDCAN2中断线0，回调中排空FIFO写入16深度
+  *   2. 接收采用RX FIFO0 + FDCAN1中断线0，回调中排空FIFO写入16深度
   *      无锁SPSC环形缓冲（中断只写写指针、主循环只读写指针，Cortex-M
   *      单核下配合DMB屏障安全），应用层CAN_PollRx()轮询取走；
   *   3. bus-off采用指数退避自动恢复：1s起步翻倍、上限30s（CAN_Task调度），
@@ -27,16 +28,15 @@
   *
   ******************************************************************************
   */
-#include "can.h"
+#include "can_drv.h"
 #include "isotp.h"
 
 /*--------------------------------------- 模块配置 --------------------------------------*/
-#define CAN_RX_RING_LEN       16U                     /* 接收环形缓冲深度（2的幂，取模优化） */
-#define CAN_BUSOFF_BACKOFF_MIN_MS   1000U             /* bus-off恢复起始退避 */
-#define CAN_BUSOFF_BACKOFF_MAX_MS   30000U            /* bus-off恢复退避上限 */
+/* CAN_RX_RING_LEN（取 2 的幂以用掩码取模）与 CAN_BACKOFF_INIT_MS /
+ * CAN_BACKOFF_MAX_MS 均由 app_board_cfg.h 给出 */
 
 /*--------------------------------------- 模块内部变量 --------------------------------------*/
-FDCAN_HandleTypeDef hfdcan2;                          /* FDCAN2句柄（中断服务函数引用） */
+FDCAN_HandleTypeDef hfdcan;                           /* 实例由 CAN_PERIPH 决定（ISR 引用） */
 
 static CAN_RxMsg    s_rxRing[CAN_RX_RING_LEN];        /* 接收环形缓冲 */
 static volatile uint8_t s_rxW;                        /* 写索引（仅接收中断修改） */
@@ -51,7 +51,7 @@ static bool         s_promisc;                        /* 混杂模式：接收�
 static bool         s_loopbackSelfTest;               /* 运行时自检：内部回环 */
 static uint32_t     s_bitrate = CAN_BITRATE;          /* 当前位速率 */
 
-static volatile uint32_t s_busOffBackoffMs = CAN_BUSOFF_BACKOFF_MIN_MS; /* 当前退避时长 */
+static volatile uint32_t s_busOffBackoffMs = CAN_BACKOFF_INIT_MS; /* 当前退避时长 */
 static volatile uint32_t s_busOffDueTick;             /* 待执行的恢复时刻（0=无待恢复） */
 
 /* 波特率-分频查找表：FDCAN内核时钟=PCLK1=150MHz，所有档位统一
@@ -84,7 +84,7 @@ static uint32_t CAN_BitrateToPrescaler(uint32_t bitrate)
 }
 
 /**
-  * @brief  FDCAN2完整配置流程（初始化与运行时重配置共用）
+  * @brief  FDCAN 完整配置流程（初始化与运行时重配置共用，实例由 CAN_PERIPH 决定）
   * @note   仅允许主循环上下文调用；重配置后环形缓冲复位（此时已停机，无RX中断竞争）
   * @retval HAL状态
   */
@@ -100,9 +100,9 @@ static HAL_StatusTypeDef CAN_Configure(void)
   }
 
   /* 运行中重配置：先停机使状态机回到READY（HAL_FDCAN_Init要求） */
-  if (hfdcan2.State == HAL_FDCAN_STATE_BUSY)
+  if (hfdcan.State == HAL_FDCAN_STATE_BUSY)
   {
-    if (HAL_FDCAN_Stop(&hfdcan2) != HAL_OK)
+    if (HAL_FDCAN_Stop(&hfdcan) != HAL_OK)
     {
       return HAL_ERROR;
     }
@@ -110,38 +110,38 @@ static HAL_StatusTypeDef CAN_Configure(void)
 
   /* 位时序：PCLK1=150MHz，NominalPrescaler -> tq，10tq/位 -> 对应位速率，
    * 采样点80%。经典CAN模式不使用数据段位时序，按与仲裁段相同的合法值配置。 */
-  hfdcan2.Instance                            = FDCAN2;
-  hfdcan2.Init.ClockDivider                   = FDCAN_CLOCK_DIV1;
-  hfdcan2.Init.FrameFormat                    = FDCAN_FRAME_CLASSIC;
+  hfdcan.Instance                            = CAN_PERIPH;
+  hfdcan.Init.ClockDivider                   = FDCAN_CLOCK_DIV1;
+  hfdcan.Init.FrameFormat                    = FDCAN_FRAME_CLASSIC;
 #if (CAN_DEBUG_SELFTEST != 0)
-  hfdcan2.Init.Mode                           = FDCAN_MODE_EXTERNAL_LOOPBACK; /* 调试自测试：自发自收且驱动总线脚 */
+  hfdcan.Init.Mode                           = FDCAN_MODE_EXTERNAL_LOOPBACK; /* 调试自测试：自发自收且驱动总线脚 */
 #else
   if (s_loopbackSelfTest)
   {
-    hfdcan2.Init.Mode                         = FDCAN_MODE_INTERNAL_LOOPBACK; /* 上电自检：内部回环不驱动总线脚 */
+    hfdcan.Init.Mode                         = FDCAN_MODE_INTERNAL_LOOPBACK; /* 上电自检：内部回环不驱动总线脚 */
   }
   else
   {
-    hfdcan2.Init.Mode                         = FDCAN_MODE_NORMAL;
+    hfdcan.Init.Mode                         = FDCAN_MODE_NORMAL;
   }
 #endif
-  hfdcan2.Init.AutoRetransmission             = ENABLE;   /* 硬件自动重发，保证可靠送达 */
-  hfdcan2.Init.TransmitPause                  = DISABLE;
-  hfdcan2.Init.ProtocolException              = ENABLE;
-  hfdcan2.Init.NominalPrescaler               = prescaler;
-  hfdcan2.Init.NominalSyncJumpWidth           = 2U;
-  hfdcan2.Init.NominalTimeSeg1                = 7U;       /* 传播段+相位段1 */
-  hfdcan2.Init.NominalTimeSeg2                = 2U;
-  hfdcan2.Init.DataPrescaler                  = prescaler;
-  hfdcan2.Init.DataSyncJumpWidth              = 2U;
-  hfdcan2.Init.DataTimeSeg1                   = 7U;
-  hfdcan2.Init.DataTimeSeg2                   = 2U;
+  hfdcan.Init.AutoRetransmission             = ENABLE;   /* 硬件自动重发，保证可靠送达 */
+  hfdcan.Init.TransmitPause                  = DISABLE;
+  hfdcan.Init.ProtocolException              = ENABLE;
+  hfdcan.Init.NominalPrescaler               = prescaler;
+  hfdcan.Init.NominalSyncJumpWidth           = 2U;
+  hfdcan.Init.NominalTimeSeg1                = 7U;       /* 传播段+相位段1 */
+  hfdcan.Init.NominalTimeSeg2                = 2U;
+  hfdcan.Init.DataPrescaler                  = prescaler;
+  hfdcan.Init.DataSyncJumpWidth              = 2U;
+  hfdcan.Init.DataTimeSeg1                   = 7U;
+  hfdcan.Init.DataTimeSeg2                   = 2U;
   /* 过滤器数量：混杂/自检模式1个(全收，多过滤器会重复存帧)；正常模式2个(心跳+诊断) */
-  hfdcan2.Init.StdFiltersNbr                  = (s_promisc || s_loopbackSelfTest) ? 1U : 2U;
-  hfdcan2.Init.ExtFiltersNbr                  = 0U;
-  hfdcan2.Init.TxFifoQueueMode                = FDCAN_TX_FIFO_OPERATION;
+  hfdcan.Init.StdFiltersNbr                  = (s_promisc || s_loopbackSelfTest) ? 1U : 2U;
+  hfdcan.Init.ExtFiltersNbr                  = 0U;
+  hfdcan.Init.TxFifoQueueMode                = FDCAN_TX_FIFO_OPERATION;
 
-  status = HAL_FDCAN_Init(&hfdcan2);
+  status = HAL_FDCAN_Init(&hfdcan);
   if (status != HAL_OK)
   {
     return status;
@@ -163,7 +163,7 @@ static HAL_StatusTypeDef CAN_Configure(void)
   }
   else
   {
-#if (CAN_NODE_ROLE == CAN_NODE_A)
+#if ROLE_IS_GW
     filterConfig.FilterID1  = CAN_ID_RESP_B2A;         /* 板A接收板B的应答帧 */
 #else
     filterConfig.FilterID1  = CAN_ID_CMD_A2B;           /* 板B接收板A的命令帧 */
@@ -172,7 +172,7 @@ static HAL_StatusTypeDef CAN_Configure(void)
   }
 #endif
 
-  status = HAL_FDCAN_ConfigFilter(&hfdcan2, &filterConfig);
+  status = HAL_FDCAN_ConfigFilter(&hfdcan, &filterConfig);
   if (status != HAL_OK)
   {
     return status;
@@ -185,13 +185,13 @@ static HAL_StatusTypeDef CAN_Configure(void)
   if (!s_promisc && !s_loopbackSelfTest)
   {
     filterConfig.FilterIndex = 1U;
-#if (CAN_NODE_ROLE == CAN_NODE_A)
+#if ROLE_IS_GW
     filterConfig.FilterID1   = ISOTP_DIAG_RESP_ID;      /* 板A接收诊断应答0x7E8 */
 #else
     filterConfig.FilterID1   = ISOTP_DIAG_REQ_ID;       /* 板B接收诊断请求0x7E0 */
 #endif
     filterConfig.FilterID2   = 0x7FFU;
-    status = HAL_FDCAN_ConfigFilter(&hfdcan2, &filterConfig);
+    status = HAL_FDCAN_ConfigFilter(&hfdcan, &filterConfig);
     if (status != HAL_OK)
     {
       return status;
@@ -202,13 +202,13 @@ static HAL_StatusTypeDef CAN_Configure(void)
   /* 全局过滤器：混杂/自检模式下非匹配标准/扩展帧一并收入RX FIFO0；正常模式全部拒绝 */
   if (s_promisc || s_loopbackSelfTest)
   {
-    status = HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_ACCEPT_IN_RX_FIFO0,
+    status = HAL_FDCAN_ConfigGlobalFilter(&hfdcan, FDCAN_ACCEPT_IN_RX_FIFO0,
                                           FDCAN_ACCEPT_IN_RX_FIFO0,
                                           FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
   }
   else
   {
-    status = HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_REJECT, FDCAN_REJECT,
+    status = HAL_FDCAN_ConfigGlobalFilter(&hfdcan, FDCAN_REJECT, FDCAN_REJECT,
                                           FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
   }
   if (status != HAL_OK)
@@ -216,14 +216,14 @@ static HAL_StatusTypeDef CAN_Configure(void)
     return status;
   }
 
-  status = HAL_FDCAN_Start(&hfdcan2);
+  status = HAL_FDCAN_Start(&hfdcan);
   if (status != HAL_OK)
   {
     return status;
   }
 
   /* 接收新报文 + Tx事件确认 + 总线错误状态中断（V1.2.3中断线由ILS复位值决定，均走中断线0） */
-  status = HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U);
+  status = HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U);
   if (status != HAL_OK)
   {
     return status;
@@ -234,19 +234,19 @@ static HAL_StatusTypeDef CAN_Configure(void)
    *    V1.2.3的HAL据此置TXBTIE寄存器——G4精简FDCAN IP在TXBTIE未使能时
    *    事件FIFO写入处于未授权状态，会导致每次发送误报TEFL（元素丢失）；
    * 3) TEFL：真实丢失时的告警（正常应为0）。 */
-  status = HAL_FDCAN_ActivateNotification(&hfdcan2,
+  status = HAL_FDCAN_ActivateNotification(&hfdcan,
                                           FDCAN_IT_TX_EVT_FIFO_NEW_DATA | FDCAN_IT_TX_EVT_FIFO_ELT_LOST,
                                           0U);
   if (status != HAL_OK)
   {
     return status;
   }
-  status = HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_TX_COMPLETE, 0x07U);
+  status = HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_TX_COMPLETE, 0x07U);
   if (status != HAL_OK)
   {
     return status;
   }
-  status = HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_BUS_OFF | FDCAN_IT_ERROR_PASSIVE, 0U);
+  status = HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_BUS_OFF | FDCAN_IT_ERROR_PASSIVE, 0U);
   if (status != HAL_OK)
   {
     return status;
@@ -260,7 +260,7 @@ static HAL_StatusTypeDef CAN_Configure(void)
 }
 
 /**
-  * @brief  初始化FDCAN2：位时序、过滤器、中断、启动
+  * @brief  初始化 FDCAN：位时序、过滤器、中断、启动
   * @retval HAL状态
   */
 HAL_StatusTypeDef CAN_Init(void)
@@ -268,7 +268,7 @@ HAL_StatusTypeDef CAN_Init(void)
   s_bitrate         = CAN_BITRATE;
   s_promisc         = false;
   s_loopbackSelfTest = false;
-  s_busOffBackoffMs = CAN_BUSOFF_BACKOFF_MIN_MS;
+  s_busOffBackoffMs = CAN_BACKOFF_INIT_MS;
   s_busOffDueTick   = 0U;
   return CAN_Configure();
 }
@@ -321,15 +321,15 @@ void CAN_Task(void)
   {
     s_busOffDueTick = 0U;
 
-    if (HAL_FDCAN_Stop(&hfdcan2) == HAL_OK)
+    if (HAL_FDCAN_Stop(&hfdcan) == HAL_OK)
     {
-      (void)HAL_FDCAN_Start(&hfdcan2);
-      (void)HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U);
-      (void)HAL_FDCAN_ActivateNotification(&hfdcan2,
+      (void)HAL_FDCAN_Start(&hfdcan);
+      (void)HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U);
+      (void)HAL_FDCAN_ActivateNotification(&hfdcan,
                                           FDCAN_IT_TX_EVT_FIFO_NEW_DATA | FDCAN_IT_TX_EVT_FIFO_ELT_LOST,
                                           0U);
-      (void)HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_TX_COMPLETE, 0x07U);
-      (void)HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_BUS_OFF | FDCAN_IT_ERROR_PASSIVE, 0U);
+      (void)HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_TX_COMPLETE, 0x07U);
+      (void)HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_BUS_OFF | FDCAN_IT_ERROR_PASSIVE, 0U);
     }
     else
     {
@@ -393,7 +393,7 @@ HAL_StatusTypeDef CAN_Send(uint32_t stdId, const uint8_t *data, uint8_t len)
     return HAL_ERROR;
   }
 
-  if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan2) == 0U)
+  if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan) == 0U)
   {
     s_stats.txErrors++;                        /* Tx FIFO满：放弃本帧并统计 */
     return HAL_BUSY;
@@ -418,7 +418,7 @@ HAL_StatusTypeDef CAN_Send(uint32_t stdId, const uint8_t *data, uint8_t len)
   txHeader.TxEventFifoControl  = FDCAN_STORE_TX_EVENTS;    /* 存Tx事件供发送确认 */
   txHeader.MessageMarker       = marker;
 
-  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan2, &txHeader, txData) != HAL_OK)
+  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan, &txHeader, txData) != HAL_OK)
   {
     s_stats.txErrors++;
     return HAL_ERROR;
@@ -539,7 +539,7 @@ void HAL_FDCAN_TxEventFifoCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t TxEvent
         s_stats.txMaxLatencyMs = latency;       /* 入队->总线确认最大延迟 */
       }
 
-      s_busOffBackoffMs = CAN_BUSOFF_BACKOFF_MIN_MS;  /* 总线健康：复位退避 */
+      s_busOffBackoffMs = CAN_BACKOFF_INIT_MS;  /* 总线健康：复位退避 */
     }
 
     /* 同Rx排空：清除GetTxEvent排空后粘滞的FIFO_EMPTY错误码，防ErrorCallback误报 */
@@ -573,9 +573,9 @@ void HAL_FDCAN_ErrorStatusCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t ErrorSt
     /* 指数退避：1s->2s->4s->...->30s封顶 */
     s_busOffDueTick = HAL_GetTick() + s_busOffBackoffMs;
     s_busOffBackoffMs *= 2U;
-    if (s_busOffBackoffMs > CAN_BUSOFF_BACKOFF_MAX_MS)
+    if (s_busOffBackoffMs > CAN_BACKOFF_MAX_MS)
     {
-      s_busOffBackoffMs = CAN_BUSOFF_BACKOFF_MAX_MS;
+      s_busOffBackoffMs = CAN_BACKOFF_MAX_MS;
     }
   }
 }
@@ -587,4 +587,15 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
 {
   UNUSED(hfdcan);
   s_stats.protocolErrors++;
+}
+
+/*====================================================================*/
+/* ISR symbol wired into the startup vector table                      */
+/*   Same convention as BSP/bsp_uart.c: the BSP owns its vector, the   */
+/*   name comes from the config point so switching FDCAN1/FDCAN2 does   */
+/*   not touch Core/Src/stm32g4xx_it.c.                                 */
+/*====================================================================*/
+void CAN_IRQ_HANDLER(void)
+{
+    HAL_FDCAN_IRQHandler(&hfdcan);
 }
