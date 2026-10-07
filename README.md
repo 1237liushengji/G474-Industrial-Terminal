@@ -2,9 +2,9 @@
 
 基于两块 DRG ST-10 STM32G474VET6 开发板，把既有的 **CAN 双机通信（v3.0）** 与
 **Modbus-RTU 双节点（v2.0）** 两个已验证工程，演进为一套带本地 HMI、离线缓存与 MQTT 上云能力的
-边缘采集网关。当前状态：**v0.4 已落地（CAN↔寄存器数据桥：can_router 表驱动 + 契约帧收发 +
-ISO-TP 快照 + CMD 幂等 + 镜像），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
-尚未上板验证**（上板验收项见 docs/迁移说明 §11.3）。
+边缘采集网关。当前状态：**v0.5 已落地（M1 影子网关：A 板 USART1 0xAA55 帧 + JSON +
+PC 影子网关/校验工具，无硬件端到端联调 PASS），4 Target 全量重建 0 Error / 0 Warning，
+离线回归全绿；尚未上板验证**（上板验收项见 docs/迁移说明 §12.2）。
 
 ## 系统框图
 
@@ -60,18 +60,19 @@ ISO-TP 快照 + CMD 幂等 + 镜像），4 Target 全量重建 0 Error / 0 Warni
 | [05 · 实施路线与验收矩阵](docs/05-实施路线与验收矩阵.md) | v0.1→v1.0 八个里程碑、14 项带数字的验收判据、11 种故障注入 | 每个 tag 收口时 |
 | [06 · 资产复用与冲突消解](docs/06-资产复用与冲突消解.md) | 可复用资产总账、冲突决议、11 处文档-代码漂移、合并前置动作 | v0.1 执行时逐条照做 |
 
-## 目录结构（v0.2：FreeRTOS 已入仓，任务集在 App/app_rtos.c）
+## 目录结构（v0.5：FreeRTOS + CAN 桥 + M1 上行已入仓）
 
 ```
 App/        app_rtos(T1-T7 任务集+心跳+故障钩子) mb_master_port gw 角色 node_app 节点角色+UI
-Gateway/    can_router.c(表驱动路由) bridge.c(CAN↔寄存器桥+镜像+快照+CMD/ACK)  （uplink_port 待 v0.5）
+Gateway/    can_router.c(表驱动路由) bridge.c(CAN↔寄存器桥+镜像+快照+CMD/ACK) uplink_port.c(M1 0xAA55 帧/T4)
 Network/    mqttc/ + esp_at + at_window + backfill        （待 v0.6）
 Protocol/   modbus_*（64 寄存器/FC04/0x0F 空洞）  isotp(多实例)  uds  can_contract.h(契约帧)
 BSP/        app_board_cfg.h  bsp_console(USART1)  bsp_uart(RS485 TXE/TC 中断)  rs485 tick eeprom w25q128 lcd key led iwdg can_drv(队列+4 条白名单滤波)
 Storage/    config.c(24C02)  log.c(W25Q 256KB 环形)  log_service.c(队列化,log_task)
 Common/     types.h  ring_buffer.c  bsp_printf.c(4x128B/任务+互斥)  console.c  dp_table.c(契约唯一源)  fmt.c
 Middlewares/FreeRTOS-Kernel/  V10.5.1 裁剪版（tasks/list/queue/port/heap_4, GCC/ARM_CM4F 端口）
-Tools/python/    modbus/ can/ mqtt/ contract_check.py + dp_table.json/  离线回归 + 契约校验 + 影子网关
+Tools/python/    modbus/ can/ contract_check.py + dp_table.json  uplink_frames + mqtt_shadow_gw + mqtt_verify + test_shadow_e2e
+Tools/mqtt/      mosquitto.conf + mqtt_topics.md（主题/线协议冻结）
 Tools/verification/ crc_check.js  modbus_vectors.js  modbus_vectors.json   黄金向量（11 条，冻结）
 Tools/ci/        check_config_points.sh                  A-01 单一配置点检查（v0.2 新增）
 docs/       本方案文档集 + 后续实验记录
@@ -86,7 +87,7 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 | RTOS | FreeRTOS-Kernel **V10.5.1**（`Middlewares/`，GCC/ARM_CM4F 端口适配 ARMCLANG V6.14）；HAL 时基 = TIM6，SysTick 归内核 |
 | IDE | Keil MDK，ARMCLANG V6.14，DFP `STM32G4xx_DFP 2.2.0`，HAL **V1.2.3**（锁版本，勿顺手升级） |
 | PC | Windows 11 22631；Python 3.14.7（`pyserial` / `pypdf` / `pypdfium2`）；Node v26.7.0 |
-| Broker | Mosquitto 2.1.2，`E:\Edge\mosquitto-2.1.2` |
+| Broker | Mosquitto 2.1.2 源码在 `E:\Edge\mosquitto-2.1.2`（**尚无二进制，需安装或自编译**）；开发/CI 用 pip `amqtt`（`Tools/python/test_shadow_e2e.py` 内建） |
 | 手柄串口 | 当前 0 个 COM 口（板子未接线） |
 | **已持有** | USB-TTL 串口线 ✅、外接 24C02 模块 ✅、外接 W25Q 模块 ✅、ESP-12F ×2 ✅ |
 | **未持有** | USB-RS485 ❌（仅影响 A-06/A-11 的验收自动化，**不阻塞运行**）、USB-CAN ❌（可选） |
@@ -94,14 +95,12 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 
 ## 下一步
 
-**v0.4 代码层已收口**（[docs/迁移说明 §11](docs/迁移说明.md)：落地清单 / 偏离注记 / 证据）。
-下一步两件事：
+**v0.5 代码层已收口**（[docs/迁移说明 §12](docs/迁移说明.md)：落地清单 / 环境修订 / 证据），
+含无硬件端到端联调（合成帧→影子网关→broker→订阅者 PASS）。下一步两件事：
 
-1. **上板验证 v0.4 实机行为**（无硬件不可替代）：B 板 TFT 改 `temp_limit` → A 板镜像 ms~秒级同步
-   （console `stats` 看 snap ok 计数）；console `cmd 9 300` → 观察 `cmd_ack`、B 板 24C02 落盘、
-   断电重启仍在；顺手收口 v0.2/v0.3 遗留验收（A-02/03/04/09/10、A-05 `--port`）。
-2. **v0.5 推进（无需硬件可编码）**：M1 影子网关——A 板 USART1 二进制帧协议（`0xAA55` 定界）
-   + `Tools/python/mqtt_shadow_gw.py` + Mosquitto 联调。
+1. **上板验证（无硬件不可替代）**：v0.2–v0.5 实机行为——TFT 改参→A 镜像同步、`cmd 9 300`→24C02
+   落盘、真实 USART1 帧流（`mqtt_shadow_gw.py --port COMx`）、A-02/03/04/05/06/09/10 收口。
+2. **v0.6 推进（无需硬件可编码）**：M2 设备侧——MQTT-C 移植 + ESP-AT 状态机 + 离线补发。
 
 **上板前三根线**（相对 v0.1 不变）：
 - CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）
