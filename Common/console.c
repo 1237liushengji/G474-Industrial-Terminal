@@ -24,10 +24,12 @@
 
 #include "app_board_cfg.h"
 #include "app_rtos.h"
+#include "bridge.h"
 #include "bsp_console.h"
 #include "bsp_printf.h"
 #include "bsp_rs485.h"
 #include "log_service.h"
+#include "modbus_register.h"
 #include "uds.h"
 
 #include "main.h"
@@ -67,6 +69,8 @@ static void Console_PrintHelp(void)
     Put("  sniff <on|off>     bus monitor mode\r\n");
     Put("  send <id> [b0..b7] send frame, hex, e.g. send 321 11 22\r\n");
 #if ROLE_IS_GW
+    Put("  cmd <reg> <val>    send 0x301 CMD to the node (decimal PDU addr)\r\n");
+    Put("  snap               request a register snapshot now (0x1A0)\r\n");
     Put("  diag <cmd>         UDS: ver/up/stat/dtc/ext/def/tp/led 0|1/raw ..\r\n");
 #endif
 }
@@ -102,6 +106,18 @@ static void Cmd_Stats(void)
     BSP_Printf("dbg poll=%lu hx=%lu cmd=%lu resp=%lu\r\n",
                (unsigned long)g_dbgPoll, (unsigned long)g_dbgHx,
                (unsigned long)g_dbgCmd, (unsigned long)g_dbgResp);
+    BSP_Printf("link mask=0x%02lX peer=%u hb_age=%lums\r\n",
+               (unsigned long)MB_REG_GetHolding(MB_REG_HOLD_LINK_MASK),
+               (unsigned)Bridge_PeerUp(),
+               (unsigned long)Bridge_GetHbAgeMs());
+#if ROLE_IS_GW
+    BSP_Printf("snap ok=%lu err=%lu age=%lums  cmd_result=%u/%u\r\n",
+               (unsigned long)Bridge_GetSnapOkCount(),
+               (unsigned long)Bridge_GetSnapErrCount(),
+               (unsigned long)Bridge_GetSnapAgeMs(),
+               (unsigned)Bridge_GetLastCmdResult(),
+               (unsigned)Bridge_GetLastCmdExc());
+#endif
     BSP_Printf("wdt task_ovr=%lu (must stay 0) reset=0x%02lX (bit0 pin/1 sw/2 iwdg/4 bor)\r\n",
                (unsigned long)App_GetTaskOvr(),
                (unsigned long)LOG_SVC_GetResetFlags());
@@ -200,6 +216,52 @@ static void Cmd_Send(char *args)
 }
 
 #if ROLE_IS_GW
+static void Cmd_Cmd(char *args)
+{
+    long reg;
+    long val;
+    char *tok;
+
+    if ((args == NULL) || (*args == '\0'))
+    {
+        Put("usage: cmd <reg> <val>   (decimal PDU reg 0..63, value 0..65535)\r\n");
+        return;
+    }
+    tok = strtok(args, " ");
+    if (tok == NULL)
+    {
+        return;
+    }
+    reg = strtol(tok, NULL, 10);
+    tok = strtok(NULL, " ");
+    if (tok == NULL)
+    {
+        Put("usage: cmd <reg> <val>\r\n");
+        return;
+    }
+    val = strtol(tok, NULL, 10);
+
+    if ((reg < 0L) || (reg > 63L) || (val < 0L) || (val > 65535L))
+    {
+        Put("out of range\r\n");
+        return;
+    }
+    if (Bridge_RequestCmd((uint16_t)reg, (uint16_t)val) != 0U)
+    {
+        BSP_Printf("cmd queued: reg=%ld val=%ld (watch for cmd_ack)\r\n", reg, val);
+    }
+    else
+    {
+        Put("cmd busy (previous command still in flight)\r\n");
+    }
+}
+
+static void Cmd_Snap(void)
+{
+    Bridge_RequestSnapshot();
+    Put("snapshot requested (watch 'link' counters in stats)\r\n");
+}
+
 static void Cmd_Diag(char *args)
 {
     uint8_t      req[ISOTP_MAX_MSG];
@@ -316,6 +378,14 @@ static void Console_Execute(char *line)
         Cmd_Send(args);
     }
 #if ROLE_IS_GW
+    else if (strcmp(cmd, "cmd") == 0)
+    {
+        Cmd_Cmd(args);
+    }
+    else if (strcmp(cmd, "snap") == 0)
+    {
+        Cmd_Snap();
+    }
     else if (strcmp(cmd, "diag") == 0)
     {
         Cmd_Diag(args);

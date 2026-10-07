@@ -84,6 +84,14 @@ void MB_REG_SetHolding(uint16_t addr, uint16_t value)
     }
 }
 
+void MB_REG_SetHoldingRaw(uint16_t addr, uint16_t value)
+{
+    if (addr < MB_REG_HOLD_COUNT)
+    {
+        s_holding[addr] = value;
+    }
+}
+
 uint8_t MB_REG_ConfigDirty(void)
 {
     return s_cfg_dirty;

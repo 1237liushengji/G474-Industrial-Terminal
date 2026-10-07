@@ -20,6 +20,7 @@
 
 #include <string.h>
 #include "bsp_led.h"
+#include "bridge.h"
 #include "can_drv.h"
 #include "isotp.h"
 #include "bsp_rs485.h"
@@ -40,14 +41,20 @@
 #include "task.h"
 
 /*====================================================================*/
-/* Log event bridge (slave engine events -> log_task queue)            */
+/* Log event bridge (slave engine events -> log_task queue + CAN 0x201) */
 /*====================================================================*/
 static void Slave_LogEvent(uint8_t event, uint16_t param)
 {
-    /* Ordered by arrival; the blocking flash write happens in log_task (T5). */
+    /* Ordered by arrival; the blocking flash write happens in log_task (T5).
+     * v0.4: the same event also goes up the CAN event channel (0x201) so the
+     * gateway can mirror it - single-slot, worst case a burst drops the older
+     * copy, which the log still has. */
     (void)LOG_SVC_PostEvent(event,
                             (uint8_t)(param & 0xFFU),
                             (uint8_t)((param >> 8) & 0xFFU), 0U);
+    Bridge_NotifyEvent(event,
+                       (uint8_t)(param & 0xFFU),
+                       (uint8_t)((param >> 8) & 0xFFU), 0U);
 }
 
 /*====================================================================*/
@@ -522,6 +529,13 @@ static void Node_ConfigSaveService(void)
     {
         MB_REG_ClearConfigDirty();      /* value on media == registers */
         s_cfg_save_pending = 0U;
+
+        /* Tell the gateway a config-visible change just landed (v0.4):
+         * the 0x201 event makes A pull a fresh snapshot immediately, so the
+         * mirror converges in ms instead of waiting up to 30 s. */
+        Bridge_NotifyEvent((uint8_t)LOG_CONFIG_CHANGE,
+                           (uint8_t)MB_REG_GetSlaveId(),
+                           (uint8_t)MB_REG_GetBaudIdx(), 0U);
     }
     else if (done == 2U)
     {

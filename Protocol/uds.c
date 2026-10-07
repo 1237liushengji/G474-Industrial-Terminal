@@ -22,6 +22,7 @@
 #include <string.h>
 
 /*--------------------------------------- 模块状态 --------------------------------------*/
+static isotp_ctx_t s_tp;                         /* 本节点 UDS 的 ISO-TP 实例（v0.4） */
 static uint8_t  s_session;                       /* 当前会话（服务器） */
 static uint32_t s_lastActivityTick;              /* S3计时基准 */
 
@@ -34,7 +35,7 @@ static uint32_t s_lastTpTick;                    /* 上次TesterPresent时刻 */
 /*--------------------------------------- 内部工具 --------------------------------------*/
 static void Uds_SendResp(const uint8_t *resp, uint16_t len)
 {
-  (void)IsoTp_Send(resp, len);                   /* 忙则丢弃（客户端会超时重试） */
+  (void)IsoTp_Send(&s_tp, resp, len);            /* 忙则丢弃（客户端会超时重试） */
 }
 
 static void Uds_SendNrc(uint8_t sid, uint8_t nrc)
@@ -266,7 +267,7 @@ static void Uds_ClientErr(IsoTp_Result result)
   */
 IsoTp_Result Uds_ClientRequest(const uint8_t *req, uint16_t len)
 {
-  IsoTp_Result r = IsoTp_Send(req, len);
+  IsoTp_Result r = IsoTp_Send(&s_tp, req, len);
   if (r == ISOTP_OK)
   {
     s_pendingResp  = true;
@@ -355,12 +356,21 @@ void Uds_Init(void)
   s_lastTpTick = HAL_GetTick();
 
 #if ROLE_IS_GW
-  IsoTp_Init(ISOTP_DIAG_RESP_ID, ISOTP_DIAG_REQ_ID,
+  IsoTp_Init(&s_tp, ISOTP_DIAG_RESP_ID, ISOTP_DIAG_REQ_ID,
              Uds_ClientOnMsg, Uds_ClientErr);
 #else
-  IsoTp_Init(ISOTP_DIAG_REQ_ID, ISOTP_DIAG_RESP_ID,
+  IsoTp_Init(&s_tp, ISOTP_DIAG_REQ_ID, ISOTP_DIAG_RESP_ID,
              Uds_ServerOnMsg, NULL);
 #endif
+}
+
+/**
+  * @brief  喂入一帧 CAN 报文（v0.4：由 can_router 分发；ID 不匹配则忽略）
+  * @retval 1=属于 UDS 通道
+  */
+uint8_t Uds_FeedCanFrame(uint32_t id, const uint8_t *data, uint8_t len)
+{
+  return IsoTp_OnCanFrame(&s_tp, id, data, len);
 }
 
 /**
@@ -369,6 +379,9 @@ void Uds_Init(void)
 void Uds_Task(void)
 {
   uint32_t now = HAL_GetTick();
+
+  /* ISO-TP 节拍（STmin 发送 / N_Bs / N_Cr 超时） */
+  IsoTp_Task(&s_tp);
 
   /* 服务器：扩展会话S3超时回默认 */
   if ((s_session == UDS_SESSION_EXTENDED) &&
@@ -390,6 +403,6 @@ void Uds_Task(void)
   {
     uint8_t tp[2] = {0x3EU, 0x80U};
     s_lastTpTick = now;
-    (void)IsoTp_Send(tp, 2U);
+    (void)IsoTp_Send(&s_tp, tp, 2U);
   }
 }

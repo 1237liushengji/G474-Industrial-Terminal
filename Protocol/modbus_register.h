@@ -131,6 +131,17 @@ void MB_REG_Init(void);
 /** Holding registers */
 uint16_t MB_REG_GetHolding(uint16_t addr);
 void     MB_REG_SetHolding(uint16_t addr, uint16_t value);
+
+/**
+  * @brief  Write WITHOUT the config-dirty side effect (gateway mirror only).
+  * @note   The A board mirrors the node's 0x00-0x0F/0x20-0x22 into its own
+  *         bank (Gateway/bridge.c).  Using MB_REG_SetHolding() for 0x09-0x0E
+  *         would raise the persist-dirty flag on the gateway, which has no
+  *         business persisting the node's config.  Firmware-internal writes
+  *         to RO tiles (stats/meta) also come through here.
+  */
+void     MB_REG_SetHoldingRaw(uint16_t addr, uint16_t value);
+
 uint8_t  MB_REG_HoldingWritable(uint16_t addr);
 
 /**

@@ -12,6 +12,10 @@
 > ② SysTick 实际为最低优先级 (15,0)（FreeRTOS 移植约定，docs/04 §5 注记）；
 > ③ 决策 6 的 `LOG_CACHE_CAP 512→128` 已随 v0.2 落地，v0.6 补发必须走 per-seq 直读接口，
 > 不得依赖 `LOG_Read()`。
+>
+> **v0.4 实施注记**：**T3 bridge_task 已落地**（`Gateway/bridge.c`，prio 4/512w，契约帧收发 +
+> 镜像 + 快照 + CMD/ACK）；T4 uplink 待 v0.5。ISO-TP 已实例化（UDS 与快照双 ctx，各自单任务
+> 串行——见迁移说明 §11.2 注 6）。
 
 ## 1. 分层与目录
 

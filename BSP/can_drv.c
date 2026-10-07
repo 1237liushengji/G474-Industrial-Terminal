@@ -30,6 +30,7 @@
   */
 #include "can_drv.h"
 #include "isotp.h"
+#include "can_contract.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 
@@ -37,7 +38,40 @@
 /* CAN_RX_Q_LEN（FreeRTOS 队列深度，元素为 CAN_RxMsg）与 CAN_BACKOFF_INIT_MS /
  * CAN_BACKOFF_MAX_MS 均由 app_board_cfg.h 给出。
  * v0.2：接收缓冲由 16 深度 SPSC 环形缓冲改为 FreeRTOS 队列（docs/02 §5
- * 决策 1）。中断回调只做 xQueueSendFromISR + portYIELD_FROM_ISR，不做解析。 */
+ * 决策 1）。中断回调只做 xQueueSendFromISR + portYIELD_FROM_ISR，不做解析。
+ * v0.4：硬件白名单滤波器由 2 条扩为 4 条（docs/03 §4.5），帧 ID 来自
+ * Protocol/can_contract.h；v3.0 的 0x321/0x322 应用帧已废弃。 */
+
+/*--------------------------------------- 硬件滤波器白名单 --------------------------------------*/
+/* 掩码语义（FDCAN 经典帧）：SFMR1 中置 1 的位表示"必须相等"。
+ * 默认全局过滤器 = REJECT，只有下表放行的 ID 段进入 RX FIFO0。 */
+typedef struct
+{
+  uint32_t id;
+  uint32_t mask;
+} can_filter_entry_t;
+
+#if ROLE_IS_GW
+/* 网关：遥测/状态/计数/快照数据段(0x100-0x1FF)、事件/CMD_ACK(0x200-0x3FF)、
+ *       节点心跳(0x500-0x5FF)、UDS 应答 0x7E8 */
+static const can_filter_entry_t s_rxFilterTable[4] =
+{
+  { 0x100U,                   0x700U },
+  { 0x200U,                   0x600U },
+  { 0x500U,                   0x700U },
+  { ISOTP_DIAG_RESP_ID,       0x7FFU },
+};
+#else
+/* 节点：CMD(0x300-0x3FF)、快照请求+该方向FC 0x1A0(精确)、网关心跳(0x500-0x5FF)、
+ *       UDS 请求 0x7E0 */
+static const can_filter_entry_t s_rxFilterTable[4] =
+{
+  { 0x300U,                   0x700U },
+  { CANC_ID_SNAPSHOT_REQ,     0x7FFU },
+  { 0x500U,                   0x700U },
+  { ISOTP_DIAG_REQ_ID,        0x7FFU },
+};
+#endif
 
 /*--------------------------------------- 模块内部变量 --------------------------------------*/
 FDCAN_HandleTypeDef hfdcan;                           /* 实例由 CAN_PERIPH 决定（ISR 引用） */
@@ -138,8 +172,8 @@ static HAL_StatusTypeDef CAN_Configure(void)
   hfdcan.Init.DataSyncJumpWidth              = 2U;
   hfdcan.Init.DataTimeSeg1                   = 7U;
   hfdcan.Init.DataTimeSeg2                   = 2U;
-  /* 过滤器数量：混杂/自检模式1个(全收，多过滤器会重复存帧)；正常模式2个(心跳+诊断) */
-  hfdcan.Init.StdFiltersNbr                  = (s_promisc || s_loopbackSelfTest) ? 1U : 2U;
+  /* 过滤器数量：混杂/自检模式1个(全收，多过滤器会重复存帧)；正常模式4个白名单 */
+  hfdcan.Init.StdFiltersNbr                  = (s_promisc || s_loopbackSelfTest) ? 1U : 4U;
   hfdcan.Init.ExtFiltersNbr                  = 0U;
   hfdcan.Init.TxFifoQueueMode                = FDCAN_TX_FIFO_OPERATION;
 
@@ -149,54 +183,46 @@ static HAL_StatusTypeDef CAN_Configure(void)
     return status;
   }
 
-  /* 接收过滤器：混杂/自检模式收全部；正常模式只收对端报文（掩码0x7FF精确匹配） */
+  /* 接收过滤器：混杂/自检模式收全部；正常模式按角色白名单四连（docs/03 §4.5）。
+   * 白名单显式放行 + 全局 REJECT 是抗广播风暴的正确默认。 */
   filterConfig.IdType       = FDCAN_STANDARD_ID;
   filterConfig.FilterIndex  = 0U;
   filterConfig.FilterType   = FDCAN_FILTER_MASK;
   filterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+
 #if (CAN_DEBUG_SELFTEST != 0)
   filterConfig.FilterID1    = 0x000U;                 /* 调试自测试：掩码0，接收所有ID */
   filterConfig.FilterID2    = 0x000U;
-#else
-  if (s_promisc || s_loopbackSelfTest)
-  {
-    filterConfig.FilterID1  = 0x000U;                 /* 混杂/自检：掩码0，接收所有标准ID */
-    filterConfig.FilterID2  = 0x000U;
-  }
-  else
-  {
-#if ROLE_IS_GW
-    filterConfig.FilterID1  = CAN_ID_RESP_B2A;         /* 板A接收板B的应答帧 */
-#else
-    filterConfig.FilterID1  = CAN_ID_CMD_A2B;           /* 板B接收板A的命令帧 */
-#endif
-    filterConfig.FilterID2  = 0x7FFU;                   /* 掩码：11位ID全比较 */
-  }
-#endif
-
   status = HAL_FDCAN_ConfigFilter(&hfdcan, &filterConfig);
   if (status != HAL_OK)
   {
     return status;
   }
-
-#if (CAN_DEBUG_SELFTEST != 0)
-  /* 自测试：单过滤器足够 */
 #else
-  /* 第二过滤器：诊断ID（正常模式；混杂/自检模式下全收已覆盖，避免重复存帧） */
-  if (!s_promisc && !s_loopbackSelfTest)
+  if (s_promisc || s_loopbackSelfTest)
   {
-    filterConfig.FilterIndex = 1U;
-#if ROLE_IS_GW
-    filterConfig.FilterID1   = ISOTP_DIAG_RESP_ID;      /* 板A接收诊断应答0x7E8 */
-#else
-    filterConfig.FilterID1   = ISOTP_DIAG_REQ_ID;       /* 板B接收诊断请求0x7E0 */
-#endif
-    filterConfig.FilterID2   = 0x7FFU;
+    filterConfig.FilterID1  = 0x000U;                 /* 混杂/自检：掩码0，接收所有标准ID */
+    filterConfig.FilterID2  = 0x000U;
     status = HAL_FDCAN_ConfigFilter(&hfdcan, &filterConfig);
     if (status != HAL_OK)
     {
       return status;
+    }
+  }
+  else
+  {
+    uint32_t i;
+
+    for (i = 0U; i < 4U; i++)
+    {
+      filterConfig.FilterIndex = i;
+      filterConfig.FilterID1   = s_rxFilterTable[i].id;
+      filterConfig.FilterID2   = s_rxFilterTable[i].mask;
+      status = HAL_FDCAN_ConfigFilter(&hfdcan, &filterConfig);
+      if (status != HAL_OK)
+      {
+        return status;
+      }
     }
   }
 #endif

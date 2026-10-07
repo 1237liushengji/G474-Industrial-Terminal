@@ -2,9 +2,9 @@
 
 基于两块 DRG ST-10 STM32G474VET6 开发板，把既有的 **CAN 双机通信（v3.0）** 与
 **Modbus-RTU 双节点（v2.0）** 两个已验证工程，演进为一套带本地 HMI、离线缓存与 MQTT 上云能力的
-边缘采集网关。当前状态：**v0.3 已落地（契约落地：dp_table + 契约哈希 `E71B` 双侧一致 +
-FC04/64 寄存器区段 + 交叉验证脚本），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
-尚未上板验证**（上板验收项见 docs/迁移说明 §9.4/§10.3）。
+边缘采集网关。当前状态：**v0.4 已落地（CAN↔寄存器数据桥：can_router 表驱动 + 契约帧收发 +
+ISO-TP 快照 + CMD 幂等 + 镜像），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
+尚未上板验证**（上板验收项见 docs/迁移说明 §11.3）。
 
 ## 系统框图
 
@@ -63,11 +63,11 @@ FC04/64 寄存器区段 + 交叉验证脚本），4 Target 全量重建 0 Error 
 ## 目录结构（v0.2：FreeRTOS 已入仓，任务集在 App/app_rtos.c）
 
 ```
-App/        app_rtos(T1/T2/T5/T6/T7 任务集+心跳+故障钩子) mb_master_port gw 角色 node_app 节点角色+UI
-Gateway/    can_router / dp_table / bridge / uplink_port  （待 v0.4）
+App/        app_rtos(T1-T7 任务集+心跳+故障钩子) mb_master_port gw 角色 node_app 节点角色+UI
+Gateway/    can_router.c(表驱动路由) bridge.c(CAN↔寄存器桥+镜像+快照+CMD/ACK)  （uplink_port 待 v0.5）
 Network/    mqttc/ + esp_at + at_window + backfill        （待 v0.6）
-Protocol/   modbus_*（64 寄存器/FC04/0x0F 空洞）  isotp  uds
-BSP/        app_board_cfg.h  bsp_console(USART1)  bsp_uart(RS485 TXE/TC 中断)  rs485 tick eeprom w25q128 lcd key led iwdg can_drv(队列)
+Protocol/   modbus_*（64 寄存器/FC04/0x0F 空洞）  isotp(多实例)  uds  can_contract.h(契约帧)
+BSP/        app_board_cfg.h  bsp_console(USART1)  bsp_uart(RS485 TXE/TC 中断)  rs485 tick eeprom w25q128 lcd key led iwdg can_drv(队列+4 条白名单滤波)
 Storage/    config.c(24C02)  log.c(W25Q 256KB 环形)  log_service.c(队列化,log_task)
 Common/     types.h  ring_buffer.c  bsp_printf.c(4x128B/任务+互斥)  console.c  dp_table.c(契约唯一源)  fmt.c
 Middlewares/FreeRTOS-Kernel/  V10.5.1 裁剪版（tasks/list/queue/port/heap_4, GCC/ARM_CM4F 端口）
@@ -94,15 +94,14 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 
 ## 下一步
 
-**v0.3 代码层已收口**（[docs/迁移说明 §10](docs/迁移说明.md)：落地清单 / 冻结决策 / 证据）。
-剩余两条线，按你的硬件条件二选一或并行：
+**v0.4 代码层已收口**（[docs/迁移说明 §11](docs/迁移说明.md)：落地清单 / 偏离注记 / 证据）。
+下一步两件事：
 
-1. **上板收口 v0.2/v0.3 验收**：A-02 双时基、A-03/A-04 CAN 复测、A-09 引脚断言、A-10 栈水位；
-   以及 **A-05 的寄存器腿**：`python Tools/python/contract_check.py --port COMx`
-   （应回报 firmware 0x18 == `E71B`）。上板前须按下方接线。
-2. **v0.4 推进（无需硬件即可编码）**：`Gateway/can_router` 表驱动路由 + CAN↔寄存器桥
-   （0x101/0x111/0x121 收发、`cmd_id` 幂等、CAN 下行复用 `Slave_ApplyConfigChange`），
-   届时 A-03/A-04 的固件侧观测点（0x10–0x13）开始有真实数据。
+1. **上板验证 v0.4 实机行为**（无硬件不可替代）：B 板 TFT 改 `temp_limit` → A 板镜像 ms~秒级同步
+   （console `stats` 看 snap ok 计数）；console `cmd 9 300` → 观察 `cmd_ack`、B 板 24C02 落盘、
+   断电重启仍在；顺手收口 v0.2/v0.3 遗留验收（A-02/03/04/09/10、A-05 `--port`）。
+2. **v0.5 推进（无需硬件可编码）**：M1 影子网关——A 板 USART1 二进制帧协议（`0xAA55` 定界）
+   + `Tools/python/mqtt_shadow_gw.py` + Mosquitto 联调。
 
 **上板前三根线**（相对 v0.1 不变）：
 - CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）

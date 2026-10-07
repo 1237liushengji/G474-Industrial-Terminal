@@ -34,10 +34,16 @@
 
 /*--------------------------------------- API ---------------------------------------*/
 void Uds_Init(void);                                   /* 按节点角色初始化 */
-void Uds_Task(void);                                   /* 主循环轮询（S3计时/客户端超时） */
+void Uds_Task(void);                                   /* 任务轮询（S3计时/ISO-TP节拍/客户端超时） */
 void Uds_ServerOnMsg(const uint8_t *req, uint16_t len);/* 服务器：处理一条诊断请求 */
 void Uds_ClientOnMsg(const uint8_t *rsp, uint16_t len);/* 客户端：打印诊断应答 */
 IsoTp_Result Uds_ClientRequest(const uint8_t *req, uint16_t len); /* 客户端：发请求 */
+
+/**
+  * @brief  喂入一帧 CAN 报文（v0.4：can_router 分发调用；ID 不匹配则忽略）
+  * @retval 1=属于 UDS ISO-TP 通道
+  */
+uint8_t Uds_FeedCanFrame(uint32_t id, const uint8_t *data, uint8_t len);
 
 /* 应用层钩子（main.c实现）：状态驱动LED，低电平点亮 */
 void    App_SetLed(uint8_t on);

@@ -72,6 +72,8 @@ typedef struct {
 
 /*====================================================================*/
 /*  Log events (W25Q128 ring log, spec section 13)                     */
+/*  v0.4: 8-11 added by the CAN contract (docs/03 §4.3), 0x201 EVENT   */
+/*  frames carry this enum verbatim (B board -> A board log).          */
 /*====================================================================*/
 typedef enum {
     LOG_BOOT = 0,
@@ -81,7 +83,11 @@ typedef enum {
     LOG_CRC_ERROR,
     LOG_EXCEPTION,
     LOG_CONFIG_CHANGE,
-    LOG_SYSTEM_ERROR
+    LOG_SYSTEM_ERROR,
+    LOG_LINK_UP = 8,        /* peer heartbeat (re)appeared        */
+    LOG_LINK_DOWN = 9,      /* peer heartbeat lost > timeout      */
+    LOG_MQTT_RECONNECT = 10,/* v0.6: broker reconnect             */
+    LOG_BACKFILL = 11       /* v0.6: offline backfill, p0 = drop count */
 } log_event_t;
 
 #endif /* __TYPES_H */

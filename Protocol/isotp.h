@@ -10,12 +10,17 @@
   *     0x2 CF 连续帧    [0x2N, data...]                          N=SN 0..15循环，FF后首帧SN=1
   *     0x3 FC 流控帧    [0x3FS, BS, STmin]  FS:0=继续 1=等待 2=溢出
   *   设计要点（企业级）：
-  *     1. 完全非阻塞：IsoTp_Task()在主循环中完成STmin节拍发送与超时管理；
-  *     2. 单通道半双工语义：同时仅允许一个发送事务（忙则返回BUSY）；
+  *     1. 完全非阻塞：IsoTp_Task(ctx)在任务中完成STmin节拍发送与超时管理；
+  *     2. 单通道半双工语义：同一ctx同时仅允许一个发送事务（忙则返回BUSY）；
   *     3. 接收方向：收到FF后自动回FC(BS=0,STmin=2ms)；SN错序/超时(N_Cr 1s)
   *        复位接收机并上报错误；长度超缓冲回FC(OVFLW)；
   *     4. 发送方向：FF后等FC(N_Bs 1s)，FS=CTS按对端BS/STmin发送CF块；
-  *     5. 模块按初始化的rxId过滤，其余ID直接忽略。
+  *     5. ctx按初始化的rxId过滤，其余ID直接忽略。
+  *
+  *  v0.4: 模块静态 → 多实例（ctx）。本系统同时存在两条 ISO-TP 通道：
+  *        UDS 诊断（0x7E0/0x7E8，Protocol/uds.c 持有）与
+  *        SNAPSHOT 快照（0x1A0/0x181，Gateway/bridge.c 持有）。
+  *        两者状态完全独立，互不干扰。
   ******************************************************************************
   */
 #ifndef __ISOTP_H
@@ -45,11 +50,73 @@ typedef enum
 typedef void (*IsoTp_RxCallback)(const uint8_t *data, uint16_t len);  /* 收到完整报文 */
 typedef void (*IsoTp_ErrCallback)(IsoTp_Result result);               /* 发送失败上报 */
 
+/*--------------------------------------- 实例 ---------------------------------------*/
+typedef enum
+{
+  ISOTP_RX_IDLE = 0,
+  ISOTP_RX_COLLECT
+} isotp_rx_state_t;
+
+typedef enum
+{
+  ISOTP_TX_IDLE = 0,
+  ISOTP_TX_WAIT_FC,
+  ISOTP_TX_SENDING
+} isotp_tx_state_t;
+
+typedef struct
+{
+  /* 配置 */
+  uint32_t          rx_id;              /* 本节点接收的ID（=对端发送ID） */
+  uint32_t          tx_id;              /* 本节点发送使用的ID */
+  IsoTp_RxCallback  rx_cb;
+  IsoTp_ErrCallback err_cb;
+
+  /* 接收方向 */
+  isotp_rx_state_t  rx_state;
+  uint16_t          rx_expect;          /* FF声明的总长度 */
+  uint16_t          rx_got;             /* 已收字节数 */
+  uint8_t           rx_next_sn;         /* 期望的下一个SN */
+  uint32_t          rx_last_tick;       /* N_Cr计时 */
+  uint8_t           rx_buf[ISOTP_MAX_MSG];
+
+  /* 发送方向 */
+  isotp_tx_state_t  tx_state;
+  uint16_t          tx_len;
+  uint16_t          tx_sent;            /* 已发送的应用字节数 */
+  uint8_t           tx_next_sn;
+  uint8_t           tx_block_left;      /* 当前块剩余CF数（0=无块限制） */
+  uint16_t          tx_stmin_ms;        /* 对端要求的CF间隔 */
+  uint32_t          tx_last_tick;       /* STmin节拍/N_Bs计时 */
+  uint8_t           tx_buf[ISOTP_MAX_MSG];
+} isotp_ctx_t;
+
 /*--------------------------------------- API ---------------------------------------*/
-void IsoTp_Init(uint32_t rxId, uint32_t txId,
+/**
+  * @brief  初始化一条ISO-TP通道
+  * @param  ctx   调用者提供的实例存储
+  * @param  rxId  本节点接收的帧ID（=对端发送ID）
+  * @param  txId  本节点发送使用的ID
+  */
+void IsoTp_Init(isotp_ctx_t *ctx, uint32_t rxId, uint32_t txId,
                 IsoTp_RxCallback rxCb, IsoTp_ErrCallback errCb);
-void IsoTp_Task(void);                                              /* 主循环轮询 */
-void IsoTp_OnCanFrame(uint32_t id, const uint8_t *data, uint8_t len);/* 喂入CAN帧 */
-IsoTp_Result IsoTp_Send(const uint8_t *data, uint16_t len);          /* 发送应用报文 */
+
+/**
+  * @brief  发起一次应用报文发送（非阻塞：多帧由 IsoTp_Task 节拍推进）
+  */
+IsoTp_Result IsoTp_Send(isotp_ctx_t *ctx, const uint8_t *data, uint16_t len);
+
+/**
+  * @brief  喂入一帧CAN报文（ID不匹配则忽略）
+  * @retval 1=该帧属于本通道并被处理；0=忽略
+  */
+uint8_t IsoTp_OnCanFrame(isotp_ctx_t *ctx, uint32_t id,
+                         const uint8_t *data, uint8_t len);
+
+/** @brief 周期轮询：STmin节拍发送 + N_Bs/N_Cr超时（任务上下文） */
+void IsoTp_Task(isotp_ctx_t *ctx);
+
+/** @brief 1=有发送事务进行中 */
+uint8_t IsoTp_IsBusy(const isotp_ctx_t *ctx);
 
 #endif /* __ISOTP_H */

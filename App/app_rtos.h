@@ -1,12 +1,14 @@
 /**
   ******************************************************************************
   * @file    app_rtos.h
-  * @brief   RTOS bring-up: task set, heartbeats, fault hooks (v0.2).
+  * @brief   RTOS bring-up: task set, heartbeats, fault hooks (v0.4: +T3).
   *
-  *  Task map (docs/02 §3; T3 bridge / T4 uplink arrive in later milestones):
+  *  Task map (docs/02 §3; T4 uplink arrives in v0.5):
   *    T7 wdt_task    prio 6  256 w  feeds IWDG only while all heartbeats move
-  *    T1 can_task    prio 5  512 w  RX queue -> dispatch, bus-off backoff, ISO-TP
+  *    T1 can_task    prio 5  512 w  RX queue -> can_router, bus-off, UDS
   *    T2 mb_task     prio 5  512 w  Modbus master (GW) / slave (node) engine
+  *    T3 bridge_task prio 4  512 w  CAN<->register bridge, periodic frames,
+  *                                  snapshot channel, CMD/ACK (v0.4)
   *    T5 log_task    prio 2  512 w  flash log + CONFIG_Save, blocks internally
   *    T6 ui_task     prio 1 1024 w  keys + LCD (node) / sleep (gateway)
   *    console_task   prio 2  512 w  debug console (transitional; v0.5 folds
@@ -26,6 +28,7 @@ typedef enum
     APP_HB_LOG,
     APP_HB_UI,
     APP_HB_CONSOLE,
+    APP_HB_BRIDGE,
     APP_HB_COUNT
 } app_hb_t;
 

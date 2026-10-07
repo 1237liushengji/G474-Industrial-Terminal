@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -697,6 +697,21 @@
                 <FileName>app_rtos.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Gateway</GroupName>
+          <Files>
+              <File>
+                <FileName>can_router.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\can_router.c</FilePath>
+              </File>
+              <File>
+                <FileName>bridge.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1066,7 +1081,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1424,6 +1439,21 @@
                 <FileName>app_rtos.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Gateway</GroupName>
+          <Files>
+              <File>
+                <FileName>can_router.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\can_router.c</FilePath>
+              </File>
+              <File>
+                <FileName>bridge.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1793,7 +1823,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -2151,6 +2181,21 @@
                 <FileName>app_rtos.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Gateway</GroupName>
+          <Files>
+              <File>
+                <FileName>can_router.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\can_router.c</FilePath>
+              </File>
+              <File>
+                <FileName>bridge.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2520,7 +2565,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -2878,6 +2923,21 @@
                 <FileName>app_rtos.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Gateway</GroupName>
+          <Files>
+              <File>
+                <FileName>can_router.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\can_router.c</FilePath>
+              </File>
+              <File>
+                <FileName>bridge.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
           </Files>
         </Group>

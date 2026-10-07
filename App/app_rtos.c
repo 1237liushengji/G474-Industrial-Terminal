@@ -1,13 +1,14 @@
 /**
   ******************************************************************************
   * @file    app_rtos.c
-  * @brief   RTOS bring-up, task set, heartbeats, fault hooks (v0.2).
+  * @brief   RTOS bring-up, task set, heartbeats, fault hooks (v0.2, T3 in v0.4).
   *
   *  Owns the FreeRTOS objects and the task bodies that are not role specific.
   *  Role bodies live with their application code:
   *    Master_TaskMain()  App/mb_master_port.c   (gateway)
   *    Node_TaskMain()    App/node_app.c         (node)
   *    Node_UiInit/Step   App/node_app.c         (node UI, runs in ui_task)
+  *    Bridge_TaskMain()  Gateway/bridge.c       (both roles, T3)
   ******************************************************************************
   */
 #include "app_rtos.h"
@@ -21,6 +22,8 @@
 #include "bsp_led.h"
 #include "bsp_printf.h"
 #include "can_drv.h"
+#include "can_contract.h"
+#include "can_router.h"
 #include "console.h"
 #include "dp_table.h"
 #include "isotp.h"
@@ -33,6 +36,7 @@
 #else
 #include "node_app.h"
 #endif
+#include "bridge.h"
 
 /*====================================================================*/
 /* Task parameters (docs/02 §3)                                       */
@@ -40,6 +44,7 @@
 #define STACK_WDT        256U
 #define STACK_CAN        512U
 #define STACK_MB         512U
+#define STACK_BRIDGE     512U
 #define STACK_LOG        512U
 #define STACK_UI        1024U
 #define STACK_CONSOLE    512U
@@ -47,6 +52,7 @@
 #define PRIO_WDT           6
 #define PRIO_CAN           5
 #define PRIO_MB            5
+#define PRIO_BRIDGE        4
 #define PRIO_LOG           2
 #define PRIO_UI            1
 #define PRIO_CONSOLE       2
@@ -91,11 +97,11 @@ static void App_CanDispatch(const CAN_RxMsg *m)
     g_dbgPoll++;
     g_dbgHx++;
 
-    if (m->id == CAN_ID_CMD_A2B)
+    if (m->id == CANC_ID_CMD)
     {
         g_dbgCmd++;
     }
-    if (m->id == CAN_ID_RESP_B2A)
+    if (m->id == CANC_ID_CMD_ACK)
     {
         g_dbgResp++;
     }
@@ -105,9 +111,10 @@ static void App_CanDispatch(const CAN_RxMsg *m)
         Console_PrintFrame(m);
     }
 
-    /* ISO-TP filters by its configured rxId; other IDs are ignored there.
-     * The register-level routing (can_router) arrives in v0.4. */
-    IsoTp_OnCanFrame(m->id, m->data, m->len);
+    /* v0.4: table-driven routing (Gateway/can_router.c).  The ISO-TP
+     * channels (UDS + snapshot) are rows of the same table and self-filter
+     * by rxId - all protocol handling stays in task context. */
+    CanRouter_Dispatch(m);
 }
 
 /*====================================================================*/
@@ -133,8 +140,7 @@ static void CanTask(void *arg)
         }
 
         CAN_Task();      /* bus-off exponential backoff housekeeping */
-        IsoTp_Task();    /* STmin pacing, N_Bs / N_Cr timeouts     */
-        Uds_Task();      /* S3 session rollback, client timeout    */
+        Uds_Task();      /* ISO-TP 节拍 + S3 session rollback + client timeout */
 
         App_Hb_Beat(APP_HB_CAN);
     }
@@ -152,6 +158,17 @@ static void MbTask(void *arg)
 #else
     Node_TaskMain();
 #endif
+}
+
+/*====================================================================*/
+/* T3 - bridge_task (role body owns the loop; never returns)           */
+/*====================================================================*/
+static void BridgeTask(void *arg)
+{
+    (void)arg;
+
+    /* CAN <-> register bridge + snapshot channel (Gateway/bridge.c) */
+    Bridge_TaskMain();
 }
 
 /*====================================================================*/
@@ -229,6 +246,7 @@ static const hb_watch_t s_watch[] =
 {
     { APP_HB_CAN,     300U },   /* 10 ms loop                     */
     { APP_HB_MB,      300U },   /* 1 ms loop                      */
+    { APP_HB_BRIDGE,  300U },   /* 10 ms loop                     */
     { APP_HB_LOG,    4000U },   /* flash erase worst case ~400 ms */
     { APP_HB_UI,     2500U },   /* 500 ms refresh + full clear    */
     { APP_HB_CONSOLE,3000U },   /* 10 ms loop                     */
@@ -369,6 +387,7 @@ void App_RtosInit(void)
     (void)xTaskCreate(WdtTask,     "wdt", STACK_WDT,     0, PRIO_WDT,     0);
     (void)xTaskCreate(CanTask,     "can", STACK_CAN,     0, PRIO_CAN,     0);
     (void)xTaskCreate(MbTask,      "mb",  STACK_MB,      0, PRIO_MB,      0);
+    (void)xTaskCreate(BridgeTask,  "brg", STACK_BRIDGE,  0, PRIO_BRIDGE,  0);
     (void)xTaskCreate(LogTask,     "log", STACK_LOG,     0, PRIO_LOG,     0);
     (void)xTaskCreate(UiTask,      "ui",  STACK_UI,      0, PRIO_UI,      0);
     (void)xTaskCreate(ConsoleTask, "con", STACK_CONSOLE, 0, PRIO_CONSOLE, 0);
