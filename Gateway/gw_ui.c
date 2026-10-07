@@ -15,8 +15,10 @@
   *  500 ms tick - no full-screen clear outside bring-up, so the LCD work
   *  never blocks the protocol tasks beyond their normal margins.
   *
-  *  Keys: K0 = request one snapshot now (Bridge_RequestSnapshot)
-  *        K1 = force an immediate backfill sweep (M2; no-op in M1)
+  *  Keys (schematic V1.1: ONE on-board key K0 on PD15):
+  *        K0 short = request one snapshot now (Bridge_RequestSnapshot)
+  *        K0 long  = force an immediate backfill sweep (M2; no-op in M1)
+  *        K1       = optional external key, same as the backfill sweep
   ******************************************************************************
   */
 #include "gw_ui.h"
@@ -75,7 +77,7 @@ static void Gw_UiDrawStatic(void)
     LCD_Print(12, 0, "PEER HB age", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
     LCD_Print(13, 0, "UP", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
     LCD_Print(14, 0, "HEAP", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
-    LCD_Print(15, 0, "K0:snap K1:bf", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+    LCD_Print(15, 0, "K0:snap hold:bf", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
 }
 
 /*====================================================================*/
@@ -181,20 +183,26 @@ void Gw_UiStep(void)
 
     if (kev != KEY_EVENT_NONE)
     {
-        switch (key)
+        if (key == KEY_K0)
         {
-            case KEY_K0:
-                Bridge_RequestSnapshot();       /* manual snapshot (docs v0.7) */
-                LCD_PrintField(15, 0, "snap req   ", 12,
-                               LCD_COLOR_CYAN, LCD_COLOR_BLACK);
-                break;
-            case KEY_K1:
-                Backfill_Force();               /* manual backfill sweep */
+            if (kev == KEY_EVENT_LONG)
+            {
+                Backfill_Force();               /* long: manual backfill  */
                 LCD_PrintField(15, 0, "bf sweep   ", 12,
                                LCD_COLOR_CYAN, LCD_COLOR_BLACK);
-                break;
-            default:
-                break;
+            }
+            else
+            {
+                Bridge_RequestSnapshot();       /* short: manual snapshot */
+                LCD_PrintField(15, 0, "snap req   ", 12,
+                               LCD_COLOR_CYAN, LCD_COLOR_BLACK);
+            }
+        }
+        else if (key == KEY_K1)                 /* optional external key */
+        {
+            Backfill_Force();
+            LCD_PrintField(15, 0, "bf sweep   ", 12,
+                           LCD_COLOR_CYAN, LCD_COLOR_BLACK);
         }
     }
 

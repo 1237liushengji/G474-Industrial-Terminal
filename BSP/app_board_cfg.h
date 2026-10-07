@@ -275,27 +275,36 @@
                                       __HAL_RCC_GPIOD_CLK_ENABLE(); } while (0)
 
 /*==========================================================================*/
-/* 9. Keys and LEDs                                                          */
+/* 9. Keys and LEDs - verified against schematic STM32G474VET6V1.1           */
 /*==========================================================================*/
-/* LED : the board carries ONE user LED (blue).  Measured on the PE0/PE1 group
- *       (vendor examples agree); the schematic's "PC0" is a stale net label.
- *       The second, white LED is a hard-wired power indicator.
- * KEY : three keys wired to J2 pins 42/40/37 (PA0/PA2/PA3). */
-#define KEY_WKUP_PORT            GPIOA
-#define KEY_WKUP_PIN             GPIO_PIN_0
-#define KEY_K0_PORT              GPIOA
-#define KEY_K0_PIN               GPIO_PIN_2
+/* 2026-10-07 schematic re-audit (docs/07 head note + 迁移说明 §16), which
+ * superseded the earlier PE0/PE1/PA2 mapping:
+ * KEY : the board carries ONE user key SW2, wired PD15 -> GND (active low).
+ *       No external pull-up on the KEY net (the 10k R8 belongs to BOOT0),
+ *       so the MCU internal pull-up must be enabled - bsp_key.c already
+ *       configures GPIO_PULLUP.  The single key runs the whole UI:
+ *       short = next page / item / value, long = edit / save (node_app.c),
+ *       short = snapshot, long = backfill sweep (gw_ui.c).
+ *       K1 / WKUP are OPTIONAL external keys (not populated): solder a
+ *       push-button to J2 pin 37 (PA3) / pin 42 (PA0) and they work with
+ *       the legacy semantics.
+ * LED : user LED = blue LED1, 3.3V -> R3 1.5k -> LED1 -> PC0, ACTIVE LOW.
+ *       The white LED2 is the hard-wired power indicator (no GPIO). */
+#define KEY_K0_PORT              GPIOD
+#define KEY_K0_PIN               GPIO_PIN_15   /* on-board user key SW2     */
 #define KEY_K1_PORT              GPIOA
-#define KEY_K1_PIN               GPIO_PIN_3
-#define KEY_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOA_CLK_ENABLE()
+#define KEY_K1_PIN               GPIO_PIN_3    /* optional key: J2 pin 37   */
+#define KEY_WKUP_PORT            GPIOA
+#define KEY_WKUP_PIN             GPIO_PIN_0    /* optional key: J2 pin 42   */
+#define KEY_GPIO_CLK_ENABLE()    do { __HAL_RCC_GPIOD_CLK_ENABLE(); \
+                                      __HAL_RCC_GPIOA_CLK_ENABLE(); } while (0)
 /* KEY_DEBOUNCE_MS / KEY_LONG_MS stay owned by BSP/bsp_key.c (v0.1 keeps
  * module-local tunables where they already live; centralising them here is
  * a follow-up, not a restructure). */
 
-#define LED_PORT                 GPIOE
-#define LED1_PIN                 GPIO_PIN_0    /* blue */
-#define LED2_PIN                 GPIO_PIN_1    /* green (may be unpopulated) */
-#define LED_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOE_CLK_ENABLE()
+#define LED_PORT                 GPIOC
+#define LED1_PIN                 GPIO_PIN_0    /* user LED, blue, ACTIVE LOW */
+#define LED_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOC_CLK_ENABLE()
 /* Status LEDs must be written via atomic GPIOx->BSRR.  v3.0 once chased a
  * phantom "LED freeze" caused by the TogglePin/ODR read-modify-write path
  * losing writes under sniff load. */

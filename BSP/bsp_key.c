@@ -31,12 +31,18 @@ void KEY_Init(void)
 
     KEY_GPIO_CLK_ENABLE();
 
-    gpio.Pin  = KEY_WKUP_PIN | KEY_K0_PIN | KEY_K1_PIN;
+    /* per-port masks!  The keys now live on TWO ports (K0 = PD15 on-board,
+     * K1/WKUP = PA3/PA0 optional externals).  A combined mask applied to
+     * GPIOA would silently reconfigure PA15 (I2C1_SCL!) as an input - the
+     * exact class of cross-port defect acceptance A-09 exists for. */
     gpio.Mode = GPIO_MODE_INPUT;
-    gpio.Pull = GPIO_PULLUP;    /* board keys pull to GND when pressed */
+    gpio.Pull = GPIO_PULLUP;    /* board key pulls to GND when pressed */
+
+    gpio.Pin = (uint32_t)KEY_WKUP_PIN | (uint32_t)KEY_K1_PIN;   /* PA0 | PA3 */
     HAL_GPIO_Init(KEY_WKUP_PORT, &gpio);
+
+    gpio.Pin = KEY_K0_PIN;                                      /* PD15      */
     HAL_GPIO_Init(KEY_K0_PORT, &gpio);
-    HAL_GPIO_Init(KEY_K1_PORT, &gpio);
 
     s_keys[KEY_WKUP].port = KEY_WKUP_PORT; s_keys[KEY_WKUP].pin = KEY_WKUP_PIN;
     s_keys[KEY_K0].port   = KEY_K0_PORT;   s_keys[KEY_K0].pin   = KEY_K0_PIN;

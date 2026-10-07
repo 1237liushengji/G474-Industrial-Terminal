@@ -52,6 +52,12 @@ static const pin_expect_t s_expect[] =
     { GPIOD, GPIO_PIN_11, 0x1U, 0xFFFFFFFFU, "LCD_CS PD11" },
     { GPIOD, GPIO_PIN_12, 0x1U, 0xFFFFFFFFU, "LCD_DC PD12" },
     { GPIOD, GPIO_PIN_13, 0x1U, 0xFFFFFFFFU, "LCD_BL PD13" },
+    /* user key + user LED (schematic V1.1; app_board_cfg.h §9) */
+    { GPIOD, GPIO_PIN_15, 0x0U, 0xFFFFFFFFU, "KEY_K0 PD15" },
+    { GPIOC, GPIO_PIN_0,  0x1U, 0xFFFFFFFFU, "LED1 PC0" },
+    /* optional external keys (quiet inputs when not wired) */
+    { GPIOA, GPIO_PIN_3,  0x0U, 0xFFFFFFFFU, "KEY_K1 PA3" },
+    { GPIOA, GPIO_PIN_0,  0x0U, 0xFFFFFFFFU, "KEY_WKUP PA0" },
 #if (FORM_MODE == FORM_M2)
     /* ESP-AT (USART3 on PB10/PB11, AF7) - only present/configured in M2 */
     { GPIOB, GPIO_PIN_10, 0x2U, 7U, "ESP_TX PB10" },
