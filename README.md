@@ -2,9 +2,9 @@
 
 基于两块 DRG ST-10 STM32G474VET6 开发板，把既有的 **CAN 双机通信（v3.0）** 与
 **Modbus-RTU 双节点（v2.0）** 两个已验证工程，演进为一套带本地 HMI、离线缓存与 MQTT 上云能力的
-边缘采集网关。当前状态：**v0.6 已落地（M2 设备侧：MQTT-C + ESP-AT 状态机 + +++ 逃逸 +
-离线补发 + pending 记录），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
-尚未上板验证**（上板验收项见 docs/迁移说明 §13.3）。
+边缘采集网关。当前状态：**v0.7 已落地（双板 TFT：A 板监控页 + B 板链路页 + 按键手动
+snapshot/补发 + A-09 引脚断言），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
+v1.0 仅差硬件验收**（清单见 docs/迁移说明 §14.2 与 README 验收矩阵）。
 
 ## 系统框图
 
@@ -74,7 +74,7 @@ Middlewares/FreeRTOS-Kernel/  V10.5.1 裁剪版（tasks/list/queue/port/heap_4, 
 Tools/python/    modbus/ can/ contract_check.py + dp_table.json  uplink_frames + mqtt_shadow_gw + mqtt_verify + test_shadow_e2e
 Tools/mqtt/      mosquitto.conf + mqtt_topics.md（主题/线协议冻结）
 Tools/verification/ crc_check.js  modbus_vectors.js  modbus_vectors.json   黄金向量（11 条，冻结）
-Tools/ci/        check_config_points.sh                  A-01 单一配置点检查（v0.2 新增）
+Tools/ci/        check_config_points.py/.sh (A-01)  run_acceptance.py（一键验收，v0.8）
 docs/       本方案文档集 + 后续实验记录
 MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 ```
@@ -93,15 +93,38 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 | **未持有** | USB-RS485 ❌（仅影响 A-06/A-11 的验收自动化，**不阻塞运行**）、USB-CAN ❌（可选） |
 | 容器环境 | **无容器引擎**，且本项目不需要。已装的是 `Docker Sandboxes 0.43.0`（`Docker.sbx`，AI 代理隔离工具，`sbx.exe` 在 `%LOCALAPPDATA%\DockerSandboxes\bin`，非容器引擎）。broker 走原生 Mosquitto |
 
+## 验收矩阵（v1.0 状态 · 2026-10-07）
+
+> 代码层全部就位；**⏳ = 只差实机执行**。实机步骤由 `python Tools/ci/run_acceptance.py`
+> 逐项引导（离线段已全绿：A-01 / 回归 / 契约）。判据数字见 docs/05 §2。
+
+| ID | 项目 | 状态 |
+|---|---|---|
+| A-01 | 单一配置点 | ✅ 脚本 0 命中 |
+| A-02 | 双时基一致 | ⏳ 固件就绪（TIM6+FreeRTOS），待 10 min 实机 |
+| A-03 | CAN 丢帧核算 | ⏳ 固件就绪，待 30 min 实机 |
+| A-04 | bus-off 恢复 | ⏳ 退避状态机就绪，待短接注入 |
+| A-05 | 契约哈希三方 | ◐ 离线两腿 ✅（C↔JSON、E71B）；实机 `--port` 腿待跑 |
+| A-06 | 双路交叉比对 | ⏳ `mqtt_verify.py` 就绪；离线链路 E2E 已验证 |
+| A-07 | 断 broker 补发 | ⏳ backfill/pending 就绪，待实机 |
+| A-08 | 端到端时延 | ⏳ 待实机 |
+| A-09 | 引脚归属断言 | ◐ 断言已入 BSP 并就位；实机应打印 "A-09: pin ownership OK" |
+| A-10 | 栈水位 | ⏳ 心跳/水位采集就绪，待 24 h |
+| A-11 | 双路改配置等价 | ⏳ 同一 dirty→24C02 路径就绪，待实机 |
+| A-12 | UI 不压制协议 | ⏳ 分层刷新就绪，待实机 |
+| A-13 | 掉电参数恢复 | ⏳ 待实机（v2.0 策略原样继承） |
+| A-14 | 日志环形恢复 | ⏳ 扫描/环形就绪，待实机 |
+
 ## 下一步
 
 **v0.6 代码层已收口**（[docs/迁移说明 §13](docs/迁移说明.md)：落地清单 / 决策 / 证据）。
 下一步两件事：
 
-1. **上板验证（无硬件不可替代）**：v0.2–v0.6 实机行为——TFT 改参→A 镜像同步、`cmd 9 300`→24C02
-   落盘、真实 USART1 帧流（`mqtt_shadow_gw.py --port COMx`）、M2 断 broker 补发（A-07）、
-   A-02/03/04/05/06/08/09/10 收口；v0.6 前置：ESP AT 固件确认 + 3.3 V 跌落测试。
-2. **v0.7 推进（无需硬件可编码）**：双板 TFT 人机界面（A 板监控页 + 按键手动 snapshot/补发）。
+1. **上板验证（无硬件不可替代，即 v1.0 缺口）**：`python Tools/ci/run_acceptance.py` 会先跑全部
+   离线回归，再按 README"验收矩阵"逐项引导实机步骤（TFT 改参镜像、`cmd 9 300`→24C02、
+   `mqtt_verify.py` A-06、断 broker 补发 A-07、时延 A-08、A-12 UI、A-09 断言实机）。
+2. **v0.8 已随本版一并交付**：一键验收脚本 + README 验收矩阵表（见下）；**tag v1.0 等待
+   硬件全绿后打**（不打"纸面 v1.0"）。
 
 **上板前三根线**（相对 v0.1 不变）：
 - CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）

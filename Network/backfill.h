@@ -12,6 +12,9 @@
 /** Reset the replay cursor (offline records stay in flash, seq-ascending). */
 void Backfill_Init(void);
 
+/** Bypass the scan cadence: sweep on the next Tick (console/UI "manual"). */
+void Backfill_Force(void);
+
 /** Called from uplink_task every 100 ms; replays when the session is up. */
 void Backfill_Tick(uint32_t now);
 

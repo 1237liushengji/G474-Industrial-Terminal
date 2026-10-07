@@ -63,6 +63,7 @@ static void Slave_LogEvent(uint8_t event, uint16_t param)
 typedef enum {
     UI_PAGE_HOME = 0,
     UI_PAGE_ERROR,
+    UI_PAGE_LINK,      /* v0.7: CAN/MQTT-era register segment (0x10-0x1F) */
     UI_PAGE_CONFIG,
     UI_PAGE_COUNT
 } ui_page_t;
@@ -275,6 +276,66 @@ static void UI_DrawErrorValues(void)
 }
 
 /*====================================================================*/
+/* Link page (v0.7) - the v0.3+ register segment                        */
+/*====================================================================*/
+static void UI_DrawLinkStatic(void)
+{
+    LCD_Print(0, 6, "LINK / STATS", LCD_COLOR_CYAN, LCD_COLOR_BLACK);
+    LCD_Print(1, 0, s_line, LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+
+    LCD_Print(3, 0, "485:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(3, 9, "CAN:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(4, 0, "CAN ACK:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(5, 0, "CAN OVR:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(6, 0, "CAN BO :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(8, 0, "HB AGE :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(9, 0, "UPTIME :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(10, 0, "HEAP   :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(11, 0, "TASK OVR:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    LCD_Print(15, 0, "K0:next page", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+}
+
+static void UI_DrawLinkValues(void)
+{
+    char     buf[16];
+    uint16_t lk = MB_REG_GetHolding(MB_REG_HOLD_LINK_MASK);
+    const CAN_Stats *cs = CAN_GetStats();
+
+    LCD_PrintField(3, 5, (lk & 0x01U) ? "OK " : "-- ", 4,
+                   (lk & 0x01U) ? LCD_COLOR_GREEN : LCD_COLOR_RED,
+                   LCD_COLOR_BLACK);
+    LCD_PrintField(3, 14, (lk & 0x02U) ? "OK " : "-- ", 4,
+                   (lk & 0x02U) ? LCD_COLOR_GREEN : LCD_COLOR_RED,
+                   LCD_COLOR_BLACK);
+
+    U32ToStr(cs->txAckCount & 0xFFFFU, buf);
+    LCD_PrintField(4, 9, buf, 8, LCD_COLOR_GREEN, LCD_COLOR_BLACK);
+    U32ToStr(cs->rxOverruns & 0xFFFFU, buf);
+    LCD_PrintField(5, 9, buf, 8, LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
+    U32ToStr(cs->busOffCount & 0xFFFFU, buf);
+    LCD_PrintField(6, 9, buf, 8, LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
+
+    {
+        uint32_t age = Bridge_GetHbAgeMs();
+        if (age == 0xFFFFFFFFU)
+        {
+            LCD_PrintField(8, 9, "never", 6, LCD_COLOR_RED, LCD_COLOR_BLACK);
+        }
+        else
+        {
+            U32ToStr(age / 1000U, buf);   strcat(buf, " s");
+            LCD_PrintField(8, 9, buf, 8, LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+        }
+    }
+    U32ToStr(HAL_GetTick() / 1000U, buf);  strcat(buf, " s");
+    LCD_PrintField(9, 9, buf, 8, LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    U32ToStr((uint32_t)xPortGetFreeHeapSize(), buf);
+    LCD_PrintField(10, 9, buf, 8, LCD_COLOR_WHITE, LCD_COLOR_BLACK);
+    U32ToStr(App_GetTaskOvr(), buf);
+    LCD_PrintField(11, 10, buf, 6, LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
+}
+
+/*====================================================================*/
 /* Config page (editable)                                              */
 /*====================================================================*/
 typedef struct {
@@ -421,6 +482,7 @@ static void UI_DrawStatic(void)
     {
         case UI_PAGE_HOME:    UI_DrawHomeStatic();  break;
         case UI_PAGE_ERROR:   UI_DrawErrorStatic(); break;
+        case UI_PAGE_LINK:    UI_DrawLinkStatic();  break;
         case UI_PAGE_CONFIG:  UI_DrawConfig();      break;
         default:              break;
     }
@@ -433,6 +495,7 @@ static void UI_DrawValues(void)
     {
         case UI_PAGE_HOME:    UI_DrawHomeValues();   break;
         case UI_PAGE_ERROR:   UI_DrawErrorValues();  break;
+        case UI_PAGE_LINK:    UI_DrawLinkValues();   break;
         case UI_PAGE_CONFIG:  UI_DrawConfigValues(); break;
         default:              break;
     }
@@ -460,6 +523,7 @@ static void UI_Update(void)
         {
             case UI_PAGE_HOME:   UI_DrawHomeValues();  break;
             case UI_PAGE_ERROR:  UI_DrawErrorValues(); break;
+            case UI_PAGE_LINK:   UI_DrawLinkValues();  break;
             /* CONFIG page changes are event-driven (keys) -> redraw only */
             default: break;
         }

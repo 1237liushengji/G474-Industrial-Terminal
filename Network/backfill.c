@@ -45,6 +45,11 @@ void Backfill_Init(void)
     s_next_scan_ms = 0U;
 }
 
+void Backfill_Force(void)
+{
+    s_next_scan_ms = 0U;
+}
+
 uint32_t Backfill_GetBacklog(void)
 {
     return (s_newest_seq > s_last_sent_seq) ? (s_newest_seq - s_last_sent_seq) : 0U;

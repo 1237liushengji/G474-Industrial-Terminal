@@ -698,6 +698,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_board_assert.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_board_assert.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -722,6 +727,11 @@
                 <FileName>uplink_fmt.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+              <File>
+                <FileName>gw_ui.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\gw_ui.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1485,6 +1495,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_board_assert.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_board_assert.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1509,6 +1524,11 @@
                 <FileName>uplink_fmt.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+              <File>
+                <FileName>gw_ui.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\gw_ui.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2272,6 +2292,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_board_assert.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_board_assert.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2296,6 +2321,11 @@
                 <FileName>uplink_fmt.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+              <File>
+                <FileName>gw_ui.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\gw_ui.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -3059,6 +3089,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\App\app_rtos.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_board_assert.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_board_assert.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -3083,6 +3118,11 @@
                 <FileName>uplink_fmt.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+              <File>
+                <FileName>gw_ui.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\gw_ui.c</FilePath>
               </File>
           </Files>
         </Group>

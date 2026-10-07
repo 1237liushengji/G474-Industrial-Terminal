@@ -28,6 +28,7 @@
 
 #if (FORM_MODE == FORM_M2)
 #include "backfill.h"
+#include "esp_at.h"
 #include "mqtt_client.h"
 #endif
 
@@ -402,6 +403,7 @@ void Uplink_TaskMain(void)
     uint8_t  meta_due = 1U;
 
 #if (FORM_MODE == FORM_M2)
+    Esp_Init();          /* USART3 + RX ring; SM advances via Mqtt_Service */
     Mqtt_Init();
     Backfill_Init();
 #endif

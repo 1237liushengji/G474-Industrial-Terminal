@@ -36,7 +36,11 @@
 #else
 #include "node_app.h"
 #endif
+#include "bsp_board_assert.h"
 #include "bridge.h"
+#if ROLE_IS_GW
+#include "gw_ui.h"
+#endif
 #include "uplink_port.h"
 
 /*====================================================================*/
@@ -218,11 +222,15 @@ static void UiTask(void *arg)
         App_Hb_Beat(APP_HB_UI);
     }
 #else
-    /* Gateway monitoring page arrives in v0.7; the task exists from v0.2 so
-     * the heartbeat/watchdog structure is identical on both roles. */
+    /* Gateway monitoring page (v0.7): link bits, CAN/MB/MQTT counters,
+     * backfill depth, snapshot age.  K0 = manual snapshot, K1 = manual
+     * backfill sweep. */
+    Gw_UiInit();
+
     for (;;)
     {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(5));
+        Gw_UiStep();
         App_Hb_Beat(APP_HB_UI);
     }
 #endif
@@ -277,12 +285,15 @@ static void WdtTask(void *arg)
 
     (void)arg;
 
-    now = xTaskGetTickCount();
-    for (i = 0U; i < (uint32_t)APP_HB_COUNT; i++)
     {
-        prev[i] = s_hb[i];
-        last_seen[i] = now;
-    }
+        uint8_t asserted = 0U;
+
+        now = xTaskGetTickCount();
+        for (i = 0U; i < (uint32_t)APP_HB_COUNT; i++)
+        {
+            prev[i] = s_hb[i];
+            last_seen[i] = now;
+        }
 
     for (;;)
     {
@@ -290,6 +301,15 @@ static void WdtTask(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(20));
         now = xTaskGetTickCount();
+
+        /* one-shot pin-ownership assertion (A-09): ~1.2 s after start every
+         * driver has configured its pins (RS485 in mb task, LCD in ui task,
+         * ESP in uplink task) - checking later avoids false positives. */
+        if ((asserted == 0U) && (now > 1200U))
+        {
+            asserted = 1U;
+            Board_Assert_Check();
+        }
 
         for (i = 0U; i < (uint32_t)(sizeof(s_watch) / sizeof(s_watch[0])); i++)
         {
@@ -314,6 +334,7 @@ static void WdtTask(void *arg)
         /* else: deliberately stop feeding -> IWDG resets in <= 3 s and the
          * next boot records the cause in LOG_BOOT (docs/05 fault matrix:
          * blocking a task 5 s must reset the board, not hang it). */
+    }
     }
 }
 
