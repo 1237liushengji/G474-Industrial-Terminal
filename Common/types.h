@@ -87,7 +87,10 @@ typedef enum {
     LOG_LINK_UP = 8,        /* peer heartbeat (re)appeared        */
     LOG_LINK_DOWN = 9,      /* peer heartbeat lost > timeout      */
     LOG_MQTT_RECONNECT = 10,/* v0.6: broker reconnect             */
-    LOG_BACKFILL = 11       /* v0.6: offline backfill, p0 = drop count */
+    LOG_BACKFILL = 11,      /* v0.6: offline backfill, p0 = drop count */
+    LOG_MQTT_PENDING = 12   /* v0.6: an offline-cached MQTT record (payload
+                             * field of the flash record; never logged as an
+                             * event by itself)                   */
 } log_event_t;
 
 #endif /* __TYPES_H */

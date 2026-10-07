@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Network;..\Network\mqttc\include;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -717,6 +717,46 @@
                 <FileName>uplink_port.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network</GroupName>
+          <Files>
+              <File>
+                <FileName>esp_at.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\esp_at.c</FilePath>
+              </File>
+              <File>
+                <FileName>at_window.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\at_window.c</FilePath>
+              </File>
+              <File>
+                <FileName>mqtt_client.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqtt_client.c</FilePath>
+              </File>
+              <File>
+                <FileName>backfill.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\backfill.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network/mqttc</GroupName>
+          <Files>
+              <File>
+                <FileName>mqtt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqttc\src\mqtt.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1086,7 +1126,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Network;..\Network\mqttc\include;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1464,6 +1504,46 @@
                 <FileName>uplink_port.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network</GroupName>
+          <Files>
+              <File>
+                <FileName>esp_at.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\esp_at.c</FilePath>
+              </File>
+              <File>
+                <FileName>at_window.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\at_window.c</FilePath>
+              </File>
+              <File>
+                <FileName>mqtt_client.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqtt_client.c</FilePath>
+              </File>
+              <File>
+                <FileName>backfill.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\backfill.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network/mqttc</GroupName>
+          <Files>
+              <File>
+                <FileName>mqtt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqttc\src\mqtt.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1833,7 +1913,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Network;..\Network\mqttc\include;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -2211,6 +2291,46 @@
                 <FileName>uplink_port.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network</GroupName>
+          <Files>
+              <File>
+                <FileName>esp_at.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\esp_at.c</FilePath>
+              </File>
+              <File>
+                <FileName>at_window.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\at_window.c</FilePath>
+              </File>
+              <File>
+                <FileName>mqtt_client.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqtt_client.c</FilePath>
+              </File>
+              <File>
+                <FileName>backfill.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\backfill.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network/mqttc</GroupName>
+          <Files>
+              <File>
+                <FileName>mqtt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqttc\src\mqtt.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2580,7 +2700,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Gateway;..\Network;..\Network\mqttc\include;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -2958,6 +3078,46 @@
                 <FileName>uplink_port.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_fmt.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network</GroupName>
+          <Files>
+              <File>
+                <FileName>esp_at.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\esp_at.c</FilePath>
+              </File>
+              <File>
+                <FileName>at_window.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\at_window.c</FilePath>
+              </File>
+              <File>
+                <FileName>mqtt_client.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqtt_client.c</FilePath>
+              </File>
+              <File>
+                <FileName>backfill.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\backfill.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Network/mqttc</GroupName>
+          <Files>
+              <File>
+                <FileName>mqtt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Network\mqttc\src\mqtt.c</FilePath>
               </File>
           </Files>
         </Group>

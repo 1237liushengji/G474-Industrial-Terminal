@@ -62,4 +62,56 @@ uint32_t LOG_GetLastSeq(void);
   */
 uint8_t LOG_Read(uint32_t index, log_record_t *rec);
 
+/*====================================================================*/
+/* MQTT offline pending records (v0.6, docs/03 §5.3)                    */
+/*====================================================================*/
+/* A pending record is a normal 32 B flash record with event =
+ * LOG_MQTT_PENDING.  Payload layout (frozen here, mirrored by the
+ * formatters in Gateway/uplink_port.c):
+ *
+ *   seq(4) | timestamp_ms(4) | event=12(1) | param[0]=msg type(1)
+ *   | param[1..2]=0(2) | fields[20]
+ *
+ *   type 1 telemetry : f[0..1] temp  f[2..3] humi  f[4..5] volt  f[6..7] curr   (BE u16)
+ *   type 2 status    : f[0] st  f[1] er  f[2] lk  f[3..4] ch  f[5] cv  f[6..7] heap
+ *   type 3 counters  : 10 x BE u16: rx tx crc can_ack can_ovr can_bo can_lat mb_to mb_rt mb_exc
+ *   (meta/snapshot/event are NOT cached: they are periodic/regenerated -
+ *    same trade-off the capacity calculation in docs/03 §5.3 assumes.)
+ *
+ * Only telemetry/status/counters are cached, and consumption is "publish
+ * then advance": duplicates after a reboot are allowed by design - the
+ * subscriber de-duplicates on `seq` (docs/03 §5.3).
+ */
+#define LOG_PENDING_FIELDS   20U
+
+typedef struct
+{
+    uint32_t seq;
+    uint32_t ts;
+    uint8_t  seq_lo;    /* payload "seq" byte (telemetry): peer seq at capture */
+    uint8_t  type;
+    uint8_t  fields[LOG_PENDING_FIELDS];
+} log_pending_t;
+
+/**
+  * @brief  Append one pending record (log_task context).  Returns its seq.
+  * @param  seq_lo  payload seq byte carried in param[1] (telemetry only; 0
+  *                 for status/counters which have no seq field)
+  */
+uint32_t LOG_PendingPush(uint8_t type, uint8_t seq_lo,
+                         const uint8_t fields[LOG_PENDING_FIELDS]);
+
+/**
+  * @brief  Collect up to max_n pending records with seq > after_seq,
+  *         ascending (single pass; safe from any task - flash access is
+  *         mutex-protected).
+  * @param  newest_seq receives the highest pending seq existing (0 = none)
+  * @retval number of records written to out[]
+  */
+uint8_t LOG_PendingScan(uint32_t after_seq, log_pending_t *out, uint8_t max_n,
+                        uint32_t *newest_seq);
+
+/** Pending records overwritten by the ring (data loss; A-07 watches this). */
+uint32_t LOG_PendingLostCount(void);
+
 #endif /* __LOG_H */

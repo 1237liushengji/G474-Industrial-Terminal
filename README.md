@@ -2,9 +2,9 @@
 
 基于两块 DRG ST-10 STM32G474VET6 开发板，把既有的 **CAN 双机通信（v3.0）** 与
 **Modbus-RTU 双节点（v2.0）** 两个已验证工程，演进为一套带本地 HMI、离线缓存与 MQTT 上云能力的
-边缘采集网关。当前状态：**v0.5 已落地（M1 影子网关：A 板 USART1 0xAA55 帧 + JSON +
-PC 影子网关/校验工具，无硬件端到端联调 PASS），4 Target 全量重建 0 Error / 0 Warning，
-离线回归全绿；尚未上板验证**（上板验收项见 docs/迁移说明 §12.2）。
+边缘采集网关。当前状态：**v0.6 已落地（M2 设备侧：MQTT-C + ESP-AT 状态机 + +++ 逃逸 +
+离线补发 + pending 记录），4 Target 全量重建 0 Error / 0 Warning，离线回归全绿；
+尚未上板验证**（上板验收项见 docs/迁移说明 §13.3）。
 
 ## 系统框图
 
@@ -65,7 +65,7 @@ PC 影子网关/校验工具，无硬件端到端联调 PASS），4 Target 全�
 ```
 App/        app_rtos(T1-T7 任务集+心跳+故障钩子) mb_master_port gw 角色 node_app 节点角色+UI
 Gateway/    can_router.c(表驱动路由) bridge.c(CAN↔寄存器桥+镜像+快照+CMD/ACK) uplink_port.c(M1 0xAA55 帧/T4)
-Network/    mqttc/ + esp_at + at_window + backfill        （待 v0.6）
+Network/    mqttc/(MQTT-C v1.1.6+PAL 移植) esp_at + at_window + mqtt_client + backfill
 Protocol/   modbus_*（64 寄存器/FC04/0x0F 空洞）  isotp(多实例)  uds  can_contract.h(契约帧)
 BSP/        app_board_cfg.h  bsp_console(USART1)  bsp_uart(RS485 TXE/TC 中断)  rs485 tick eeprom w25q128 lcd key led iwdg can_drv(队列+4 条白名单滤波)
 Storage/    config.c(24C02)  log.c(W25Q 256KB 环形)  log_service.c(队列化,log_task)
@@ -95,12 +95,13 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 
 ## 下一步
 
-**v0.5 代码层已收口**（[docs/迁移说明 §12](docs/迁移说明.md)：落地清单 / 环境修订 / 证据），
-含无硬件端到端联调（合成帧→影子网关→broker→订阅者 PASS）。下一步两件事：
+**v0.6 代码层已收口**（[docs/迁移说明 §13](docs/迁移说明.md)：落地清单 / 决策 / 证据）。
+下一步两件事：
 
-1. **上板验证（无硬件不可替代）**：v0.2–v0.5 实机行为——TFT 改参→A 镜像同步、`cmd 9 300`→24C02
-   落盘、真实 USART1 帧流（`mqtt_shadow_gw.py --port COMx`）、A-02/03/04/05/06/09/10 收口。
-2. **v0.6 推进（无需硬件可编码）**：M2 设备侧——MQTT-C 移植 + ESP-AT 状态机 + 离线补发。
+1. **上板验证（无硬件不可替代）**：v0.2–v0.6 实机行为——TFT 改参→A 镜像同步、`cmd 9 300`→24C02
+   落盘、真实 USART1 帧流（`mqtt_shadow_gw.py --port COMx`）、M2 断 broker 补发（A-07）、
+   A-02/03/04/05/06/08/09/10 收口；v0.6 前置：ESP AT 固件确认 + 3.3 V 跌落测试。
+2. **v0.7 推进（无需硬件可编码）**：双板 TFT 人机界面（A 板监控页 + 按键手动 snapshot/补发）。
 
 **上板前三根线**（相对 v0.1 不变）：
 - CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）

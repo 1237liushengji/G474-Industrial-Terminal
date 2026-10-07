@@ -22,6 +22,9 @@
 #include "bsp_w25q128.h"
 #include <string.h>
 
+#include "FreeRTOS.h"
+#include "semphr.h"
+
 /*====================================================================*/
 /* Geometry (absolute flash addresses)                                 */
 /*====================================================================*/
@@ -54,6 +57,28 @@ static log_record_t s_cache[LOG_CACHE_CAP];
 static uint16_t s_cache_first = 0U;    /* ring index of oldest cached record  */
 static uint16_t s_cache_len = 0U;      /* valid entries                        */
 
+/* v0.6: flash access mutex.  Writers live in log_task, but the MQTT
+ * backfill scans pending records from uplink_task - every physical access
+ * goes through the lock.  Created in LOG_Init (single writer at boot). */
+static SemaphoreHandle_t s_flash_lock;
+static uint32_t s_pending_lost;
+
+static void Log_Lock(void)
+{
+    if (s_flash_lock != 0)
+    {
+        (void)xSemaphoreTake(s_flash_lock, portMAX_DELAY);
+    }
+}
+
+static void Log_Unlock(void)
+{
+    if (s_flash_lock != 0)
+    {
+        (void)xSemaphoreGive(s_flash_lock);
+    }
+}
+
 void LOG_SetTickSource(uint32_t (*tick_ms)(void))
 {
     s_tick_ms = tick_ms;
@@ -67,25 +92,26 @@ static uint32_t AbsAddr(uint32_t off)
     return LOG_AREA_BASE + off;
 }
 
-static void RecLoad(uint32_t off, log_record_t *rec)
+/* unlocked primitives - callers hold Log_Lock */
+static void RecLoadU(uint32_t off, log_record_t *rec)
 {
     W25Q_Read(AbsAddr(off), (uint8_t *)rec, LOG_RECORD_SIZE);
 }
 
-static void RecStore(uint32_t off, const log_record_t *rec)
+static void RecStoreU(uint32_t off, const log_record_t *rec)
 {
     W25Q_Write(AbsAddr(off), (const uint8_t *)rec, LOG_RECORD_SIZE);
 }
 
-static uint32_t RecSeqAt(uint32_t off)
+static void RecLoad(uint32_t off, log_record_t *rec)
 {
-    log_record_t r;
-    RecLoad(off, &r);
-    return r.seq;
+    Log_Lock();
+    RecLoadU(off, rec);
+    Log_Unlock();
 }
 
-/* erase the 4KB sector that contains area-offset off */
-static void EraseSectorOf(uint32_t off)
+/* erase the 4KB sector that contains area-offset off (caller holds lock) */
+static void EraseSectorOfU(uint32_t off)
 {
     uint32_t sector_area_off = off & ~(uint32_t)(LOG_SECTOR_SIZE - 1U);
     W25Q_EraseSector(AbsAddr(sector_area_off));
@@ -131,6 +157,11 @@ void LOG_Init(void)
     uint32_t off = 0U;
     log_record_t rec;
 
+    if (s_flash_lock == 0)
+    {
+        s_flash_lock = xSemaphoreCreateMutex();
+    }
+
     if ((W25Q_ReadID() == 0U) || (W25Q_IsPresent() == 0U))
     {
         s_ready = 0U;
@@ -144,9 +175,10 @@ void LOG_Init(void)
     s_w_off = 0U;
 
     /* scan the whole area to find the write hole */
+    Log_Lock();
     for (off = 0U; off < LOG_DATA_SIZE; off += LOG_RECORD_SIZE)
     {
-        RecLoad(off, &rec);
+        RecLoadU(off, &rec);
         if (rec.seq == REC_EMPTY)
         {
             s_w_off = off;              /* first empty record = write pos */
@@ -158,7 +190,7 @@ void LOG_Init(void)
                the oldest record at this offset - we must erase its sector */
             s_w_off = off;
             s_written_total = s_last_seq;
-            EraseSectorOf(off);
+            EraseSectorOfU(off);
             break;
         }
         s_last_seq = rec.seq;
@@ -169,54 +201,184 @@ void LOG_Init(void)
     {
         /* area completely full and contiguous: wrap to start, erase it */
         s_w_off = 0U;
-        EraseSectorOf(0U);
-        /* cache may hold last 512 already - good enough for reads */
+        EraseSectorOfU(0U);
+        /* cache may hold the newest records already - good enough for reads */
     }
+    Log_Unlock();
 }
 
-void LOG_WriteEvent(log_event_t ev, uint8_t p0, uint8_t p1, uint8_t p2)
+/**
+  * @brief  Append one prepared record (seq/timestamp filled here).
+  * @note   Core of every write path.  Handles ring rotation, sector
+  *         pre-erase and the pending-overwrite accounting (v0.6).
+  */
+static uint32_t Log_Append(log_record_t *rec)
 {
-    log_record_t rec;
     uint32_t next;
+    log_record_t old;
 
     if (!s_ready)
     {
-        return;
+        return 0U;
     }
+
+    Log_Lock();
 
     next = s_w_off + LOG_RECORD_SIZE;
     if (next > LOG_DATA_SIZE)
     {
-        /* wrapped past the end: back to start, ring rotates here */
-        EraseSectorOf(0U);
+        /* wrapped past the end: back to start, ring rotates here.
+         * (records in sector 0 are dropped wholesale - the pending-lost
+         * count can only approximate that case, hence ">=" semantics) */
+        EraseSectorOfU(0U);
         s_w_off = 0U;
         next = LOG_RECORD_SIZE;
     }
     else if ((s_w_off % LOG_SECTOR_SIZE) == 0U && s_w_off != 0U)
     {
         /* entering a new sector that may still hold the oldest records */
-        uint32_t chk;
-        RecLoad(s_w_off, &rec);
-        chk = rec.seq;
-        if (chk != REC_EMPTY)
+        RecLoadU(s_w_off, &old);
+        if (old.seq != REC_EMPTY)
         {
-            EraseSectorOf(s_w_off);
+            EraseSectorOfU(s_w_off);
         }
     }
 
+    /* pending-overwrite accounting: if the slot we are about to write holds
+     * an unconsumed offline MQTT record, it is being lost right now */
+    RecLoadU(s_w_off, &old);
+    if ((old.seq != REC_EMPTY) && (old.event == (uint8_t)LOG_MQTT_PENDING))
+    {
+        s_pending_lost++;
+    }
+
     s_last_seq++;
-    memset(&rec, 0xFF, sizeof(rec));
-    rec.seq = s_last_seq;
-    rec.timestamp_ms = (s_tick_ms != 0) ? s_tick_ms() : 0U;
+    memset(rec, 0xFF, sizeof(*rec));
+    rec->seq = s_last_seq;
+    rec->timestamp_ms = (s_tick_ms != 0) ? s_tick_ms() : 0U;
+
+    RecStoreU(s_w_off, rec);
+    Log_Unlock();
+
+    Cache_Push(rec);
+    s_written_total = s_last_seq;
+    s_w_off = next;
+    return s_last_seq;
+}
+
+void LOG_WriteEvent(log_event_t ev, uint8_t p0, uint8_t p1, uint8_t p2)
+{
+    log_record_t rec;
+
+    if (!s_ready)
+    {
+        return;
+    }
     rec.event = (uint8_t)ev;
     rec.param[0] = p0;
     rec.param[1] = p1;
     rec.param[2] = p2;
+    (void)Log_Append(&rec);
+}
 
-    RecStore(s_w_off, &rec);
-    Cache_Push(&rec);
-    s_written_total = s_last_seq;
-    s_w_off = next;
+uint32_t LOG_PendingPush(uint8_t type, uint8_t seq_lo,
+                         const uint8_t fields[LOG_PENDING_FIELDS])
+{
+    log_record_t rec;
+
+    if (!s_ready || (fields == 0))
+    {
+        return 0U;
+    }
+    rec.event = (uint8_t)LOG_MQTT_PENDING;
+    rec.param[0] = type;
+    rec.param[1] = seq_lo;
+    rec.param[2] = 0U;
+    memcpy(rec.reserved, fields, LOG_PENDING_FIELDS);
+    return Log_Append(&rec);
+}
+
+uint8_t LOG_PendingScan(uint32_t after_seq, log_pending_t *out, uint8_t max_n,
+                        uint32_t *newest_seq)
+{
+    uint32_t off;
+    uint32_t newest = 0U;
+    uint8_t  n = 0U;
+
+    if ((out == 0) || (newest_seq == 0) || (max_n == 0U))
+    {
+        return 0U;
+    }
+    *newest_seq = 0U;
+    if (!s_ready)
+    {
+        return 0U;
+    }
+
+    Log_Lock();
+    for (off = 0U; off < LOG_DATA_SIZE; off += LOG_RECORD_SIZE)
+    {
+        log_record_t rec;
+
+        RecLoadU(off, &rec);
+        if ((rec.seq == REC_EMPTY) || (rec.event != (uint8_t)LOG_MQTT_PENDING))
+        {
+            continue;
+        }
+        if (rec.seq > newest)
+        {
+            newest = rec.seq;
+        }
+        if (rec.seq <= after_seq)
+        {
+            continue;
+        }
+
+        /* keep the SMALLEST max_n seqs (publish must be seq-ascending):
+         * insert sorted; a full array drops its largest entry */
+        {
+            log_pending_t cand;
+            uint8_t i;
+
+            if ((n >= max_n) && (rec.seq >= out[max_n - 1U].seq))
+            {
+                continue;                  /* newer than everything we hold */
+            }
+            cand.seq = rec.seq;
+            cand.ts = rec.timestamp_ms;
+            cand.seq_lo = rec.param[1];
+            cand.type = rec.param[0];
+            memcpy(cand.fields, rec.reserved, LOG_PENDING_FIELDS);
+
+            /* shift to make room (ascending) */
+            i = n;
+            while ((i > 0U) && (out[i - 1U].seq > cand.seq))
+            {
+                if (i < max_n)
+                {
+                    out[i] = out[i - 1U];
+                }
+                i--;
+            }
+            if (i < max_n)
+            {
+                out[i] = cand;
+            }
+            if (n < max_n)
+            {
+                n++;
+            }
+        }
+    }
+    Log_Unlock();
+
+    *newest_seq = newest;
+    return n;
+}
+
+uint32_t LOG_PendingLostCount(void)
+{
+    return s_pending_lost;
 }
 
 uint32_t LOG_GetCount(void)

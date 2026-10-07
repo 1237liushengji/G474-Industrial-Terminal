@@ -15,6 +15,7 @@
 #include "bridge.h"
 #include "can_contract.h"
 #include "app_board_cfg.h"
+#include "mqtt_client.h"
 #include "uplink_port.h"
 
 #include "FreeRTOS.h"
@@ -625,6 +626,9 @@ static void Bridge_UpdateLink(uint32_t now)
     {
         mask |= CANC_LINK_BIT_CAN;
     }
+    /* bit2 WiFi / bit3 MQTT come from the network layer (0 in M1: the
+     * shadow gateway at the PC owns the broker connection, not the board) */
+    mask |= Mqtt_LinkBits();
 
     MB_REG_SetHoldingRaw(MB_REG_HOLD_LINK_MASK, mask);
 }

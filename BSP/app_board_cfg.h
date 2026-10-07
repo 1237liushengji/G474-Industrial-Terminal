@@ -190,6 +190,10 @@
 #define ESP_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOB_CLK_ENABLE()
 #define ESP_GPIO_AF              GPIO_AF7_USART3
 #define ESP_AT_BAUDRATE          115200UL
+/* Wi-Fi credentials for M2 (device-side uplink).  The PC side runs a 2.4 GHz
+ * hotspot with these credentials; keep the strings short (AT+CWJAP line). */
+#define ESP_WIFI_SSID            "YOUR_SSID"
+#define ESP_WIFI_PASSWORD        "YOUR_PASSWORD"
 
 /*==========================================================================*/
 /* 5. Console - USART1 on PA9(TX) / PA10(RX), AF7                            */

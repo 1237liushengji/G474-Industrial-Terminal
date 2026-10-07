@@ -48,6 +48,14 @@ uint8_t LOG_SVC_PostEvent(uint8_t ev, uint8_t p0, uint8_t p1, uint8_t p2);
 uint8_t LOG_SVC_PostConfigSave(const config_param_t *p);
 
 /**
+  * @brief  Enqueue an offline-MQTT pending record (v0.6; any task context,
+  *         non-blocking).  Executed in log_task via LOG_PendingPush().
+  * @param  fields  LOG_PENDING_FIELDS raw bytes (layout: Storage/log.h)
+  * @retval 1 accepted, 0 dropped (queue full / no flash)
+  */
+uint8_t LOG_SVC_PostPending(uint8_t type, uint8_t seq_lo, const uint8_t *fields);
+
+/**
   * @brief  Poll for a completed save attempt (mb side, task context).
   * @retval 0 nothing new, 1 save OK (caller clears dirty flag),
   *         2 save FAILED (caller keeps dirty flag -> retries)

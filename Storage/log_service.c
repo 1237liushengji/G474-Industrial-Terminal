@@ -22,17 +22,19 @@
 typedef enum
 {
     LOG_REQ_EVENT = 0,
-    LOG_REQ_CONFIG_SAVE = 1
+    LOG_REQ_CONFIG_SAVE = 1,
+    LOG_REQ_PENDING = 2           /* v0.6: offline MQTT pending record */
 } log_req_kind_t;
 
 typedef struct
 {
     uint8_t        kind;
-    uint8_t        ev;          /* LOG_REQ_EVENT */
+    uint8_t        ev;          /* LOG_REQ_EVENT / LOG_REQ_PENDING: msg type */
     uint8_t        p0;
     uint8_t        p1;
     uint8_t        p2;
     config_param_t cfg;         /* LOG_REQ_CONFIG_SAVE */
+    uint8_t        fields[20];  /* LOG_REQ_PENDING */
 } log_req_t;
 
 static QueueHandle_t s_q;
@@ -123,6 +125,27 @@ uint8_t LOG_SVC_PostConfigSave(const config_param_t *p)
     return LogSvc_Enqueue(&req);
 }
 
+uint8_t LOG_SVC_PostPending(uint8_t type, uint8_t seq_lo, const uint8_t *fields)
+{
+    log_req_t req;
+    uint8_t i;
+
+    if (fields == 0)
+    {
+        return 0U;
+    }
+    req.kind = (uint8_t)LOG_REQ_PENDING;
+    req.ev   = type;
+    req.p0   = 0U;
+    req.p1   = seq_lo;
+    req.p2   = 0U;
+    for (i = 0U; i < 20U; i++)
+    {
+        req.fields[i] = fields[i];
+    }
+    return LogSvc_Enqueue(&req);
+}
+
 uint8_t LOG_SVC_TakeConfigSaveDone(void)
 {
     uint8_t v;
@@ -162,6 +185,10 @@ void LOG_SVC_Process(void)
              * flag stays set on the caller side -> it retries (20 ms cadence,
              * same policy as v2.0). */
         }
+    }
+    else if (req.kind == (uint8_t)LOG_REQ_PENDING)
+    {
+        (void)LOG_PendingPush(req.ev, req.p1, req.fields);
     }
     else
     {
