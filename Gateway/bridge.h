@@ -75,4 +75,17 @@ uint32_t Bridge_GetSnapAgeMs(void);
 uint8_t Bridge_GetLastCmdResult(void);
 uint8_t Bridge_GetLastCmdExc(void);
 
+/** Node publish-seq low byte as seen on 0x111 B7 / 0x501 (uplink "seq"). */
+uint8_t Bridge_GetPeerSeqLo(void);
+
+/**
+  * @brief  Full 56-register snapshot shadow (PDU 0x00..0x37) as received on
+  *         0x181 - the source of the `snapshot` uplink topic.
+  * @retval register value, or 0 while no valid snapshot arrived yet
+  *         (check Bridge_SnapValid()).
+  */
+uint16_t Bridge_GetSnapReg(uint16_t pdu);
+uint8_t  Bridge_SnapValid(void);
+uint32_t Bridge_GetSnapHashMismatch(void);
+
 #endif /* __BRIDGE_H */

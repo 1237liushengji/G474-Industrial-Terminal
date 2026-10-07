@@ -131,3 +131,19 @@ void BSP_Puts(const char *s)
         (void)xSemaphoreGive(s_tx_mutex);
     }
 }
+
+void BSP_TxLock(void)
+{
+    if (s_tx_mutex != 0)
+    {
+        (void)xSemaphoreTake(s_tx_mutex, portMAX_DELAY);
+    }
+}
+
+void BSP_TxUnlock(void)
+{
+    if (s_tx_mutex != 0)
+    {
+        (void)xSemaphoreGive(s_tx_mutex);
+    }
+}

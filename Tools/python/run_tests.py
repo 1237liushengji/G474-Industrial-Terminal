@@ -142,11 +142,90 @@ def test_v03_register_map():
     print("OK  v0.3 register map (64 regs / 0x0F hole / FC04 / cmd shadow)")
 
 
+def test_uplink_frame_codec():
+    """v0.5: 0xAA55 frame codec (mirror of Gateway/uplink_port.c)."""
+    from uplink_frames import (build_frame, FrameParser, topic_for,
+                               TYPE_TELEMETRY, TYPE_META)
+
+    payload = b'{"seq":1,"ts":2}'
+    frame = build_frame(TYPE_TELEMETRY, payload, seq=7)
+
+    # whole-buffer parse
+    p = FrameParser()
+    ev = p.feed(frame)
+    assert len(ev) == 1 and ev[0][0] == "frame", ev
+    f = ev[0][1]
+    assert f["type"] == TYPE_TELEMETRY and f["seq"] == 7 and f["payload"] == payload
+
+    # byte-by-byte parse (split at every boundary)
+    p2 = FrameParser()
+    got = []
+    for i in range(len(frame)):
+        got += [e for e in p2.feed(frame[i:i + 1]) if e[0] == "frame"]
+    assert len(got) == 1 and got[0][1]["payload"] == payload
+
+    # console text passthrough + resync (text + frame in one chunk)
+    p3 = FrameParser()
+    ev = p3.feed(b"> stats\r\n" + frame)
+    kinds = [e[0] for e in ev]
+    assert kinds == ["text", "frame"], kinds
+    assert ev[0][1] == b"> stats\r\n"
+
+    # lone 0xAA is text, next frame still parses
+    p4 = FrameParser()
+    ev = p4.feed(b"\xAA" + frame)
+    assert ev[0] == ("text", b"\xAA"), ev[0]
+    assert any(e[0] == "frame" for e in ev)
+
+    # corrupted crc -> badcrc, then a following good frame still parses
+    bad = bytearray(frame)
+    bad[-1] ^= 0xFF
+    p5 = FrameParser()
+    ev = p5.feed(bytes(bad) + frame)
+    assert ev[0][0] == "badcrc", ev
+    assert any(e[0] == "frame" for e in ev)
+
+    # topic mapping
+    assert topic_for(TYPE_TELEMETRY, "gac/x", "n1") == "gac/x/n1/telemetry"
+    assert topic_for(TYPE_META, "gac/x", "n1") == "gac/x/meta"
+
+    print("OK  uplink frame codec (0xAA55 + text demux + resync)")
+
+
+def test_shadow_gw_dryrun():
+    """v0.5: end-to-end dry run of mqtt_shadow_gw.py (stdin -> [dry] publish)."""
+    import subprocess
+    from uplink_frames import build_frame, TYPE_TELEMETRY, TYPE_META
+
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "mqtt_shadow_gw.py")
+    frames = (build_frame(TYPE_TELEMETRY, b'{"seq":9,"ts":1,"temp":28.6}', seq=1)
+              + build_frame(TYPE_META, b'{"cv":1,"ch":"E71B"}', seq=2))
+    r = subprocess.run([sys.executable, script, "--stdin", "--dry-run"],
+                       input=frames, capture_output=True, timeout=60)
+    out = r.stdout.decode("utf-8", "replace")
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert "[dry] gac/line1/gwA/n1/telemetry " in out, out
+    assert '{"seq":9,"ts":1,"temp":28.6}' in out, out
+    assert "[dry] gac/line1/gwA/meta " in out, out
+
+    # invalid JSON payload must be skipped with a warning, not published
+    bad = build_frame(TYPE_TELEMETRY, b'{oops}', seq=3)
+    r2 = subprocess.run([sys.executable, script, "--stdin", "--dry-run"],
+                        input=bad, capture_output=True, timeout=60)
+    out2 = r2.stdout.decode("utf-8", "replace")
+    assert "[dry]" not in out2 and "[warn]" in out2, out2
+
+    print("OK  shadow gateway dry-run (stdin -> topic map -> publish)")
+
+
 def main():
     test_crc_vectors()
     test_golden_frames()
     test_master_rw()
     test_v03_register_map()
+    test_uplink_frame_codec()
+    test_shadow_gw_dryrun()
     print("ALL OFFLINE TESTS PASSED")
 
 

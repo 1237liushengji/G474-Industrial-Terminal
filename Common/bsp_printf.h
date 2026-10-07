@@ -29,4 +29,14 @@ int BSP_Printf(const char *fmt, ...);
 /** Raw string output through the same mutex. */
 void BSP_Puts(const char *s);
 
+/**
+  * @brief  Take / release the console TX mutex explicitly.
+  * @note   For senders that assemble their own frames (uplink 0xAA55 frames):
+  *         lock -> BSP_Console_Send(...) -> unlock keeps text lines and
+  *         binary frames from interleaving on the shared USART1 (docs/02
+  *         decision 4).
+  */
+void BSP_TxLock(void);
+void BSP_TxUnlock(void);
+
 #endif /* __BSP_PRINTF_H */

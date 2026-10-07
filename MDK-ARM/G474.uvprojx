@@ -713,6 +713,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
+              <File>
+                <FileName>uplink_port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1454,6 +1459,11 @@
                 <FileName>bridge.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\bridge.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_port.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2197,6 +2207,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\bridge.c</FilePath>
               </File>
+              <File>
+                <FileName>uplink_port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_port.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2938,6 +2953,11 @@
                 <FileName>bridge.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Gateway\bridge.c</FilePath>
+              </File>
+              <File>
+                <FileName>uplink_port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Gateway\uplink_port.c</FilePath>
               </File>
           </Files>
         </Group>

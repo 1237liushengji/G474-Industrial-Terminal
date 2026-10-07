@@ -15,6 +15,7 @@
 #include "bridge.h"
 #include "can_contract.h"
 #include "app_board_cfg.h"
+#include "uplink_port.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -71,6 +72,8 @@ static volatile uint32_t s_snap_ok;
 static volatile uint32_t s_snap_err;
 static volatile uint32_t s_snap_last_ms;
 static volatile uint32_t s_snap_hash_mismatch;
+static uint16_t          s_snap_regs[CANC_SNAP_REG_COUNT]; /* full shadow  */
+static volatile uint8_t  s_snap_regs_valid;
 
 static volatile uint8_t  s_cmd_req;
 static volatile uint16_t s_cmd_req_reg;
@@ -173,6 +176,8 @@ void Bridge_RxEvent(const CAN_RxMsg *m)
         return;
     }
     (void)LOG_SVC_PostEvent(m->data[0], m->data[1], m->data[2], m->data[3]);
+    /* mirror the node's event onto the uplink event topic (v0.5) */
+    Uplink_NotifyEvent(m->data[0], m->data[1], m->data[2], m->data[3]);
 
     /* a node config change is a mirror-visible event: pull a fresh snapshot
      * instead of waiting for the 30 s tick (docs/05 v0.4 verification). */
@@ -455,6 +460,14 @@ static void Gw_SnapProcess(const uint8_t *p, uint16_t len)
         MB_REG_SetHoldingRaw(i, CANC_GetU16BE(&p[CANC_SNAP_HDR_LEN + 2U * i]));
     }
 
+    /* full 56-register shadow: feeds the `snapshot` uplink topic (v0.5) -
+     * the mirror domain above is a subset and stays the fast path. */
+    for (i = 0U; i < CANC_SNAP_REG_COUNT; i++)
+    {
+        s_snap_regs[i] = CANC_GetU16BE(&p[CANC_SNAP_HDR_LEN + 2U * i]);
+    }
+    s_snap_regs_valid = 1U;
+
     /* A-05 pre-check: the snapshot must carry the same contract hash as the
      * gateway's own (same firmware, same dp_table). */
     if (CANC_GetU16BE(&p[CANC_SNAP_HDR_LEN + 2U * MB_REG_HOLD_CONTRACT_HASH]) !=
@@ -591,6 +604,10 @@ static void Bridge_UpdateLink(uint32_t now)
         s_peer_up = peer_now;
         (void)LOG_SVC_PostEvent(peer_now ? (uint8_t)LOG_LINK_UP
                                          : (uint8_t)LOG_LINK_DOWN, 0U, 0U, 0U);
+        /* link edges also go out on the uplink event topic (both directions:
+         * the down edge is local-only at the node, but the gateway saw it) */
+        Uplink_NotifyEvent(peer_now ? (uint8_t)LOG_LINK_UP
+                                    : (uint8_t)LOG_LINK_DOWN, 0U, 0U, 0U);
     }
 
 #if ROLE_IS_GW
@@ -717,6 +734,42 @@ uint8_t Bridge_GetLastCmdExc(void)
 {
 #if ROLE_IS_GW
     return s_cmd_exc;
+#else
+    return 0U;
+#endif
+}
+
+uint8_t Bridge_GetPeerSeqLo(void)
+{
+    return s_peer_seq_lo;
+}
+
+uint16_t Bridge_GetSnapReg(uint16_t pdu)
+{
+#if ROLE_IS_GW
+    if ((pdu < CANC_SNAP_REG_COUNT) && (s_snap_regs_valid != 0U))
+    {
+        return s_snap_regs[pdu];
+    }
+#else
+    (void)pdu;
+#endif
+    return 0U;
+}
+
+uint8_t Bridge_SnapValid(void)
+{
+#if ROLE_IS_GW
+    return s_snap_regs_valid;
+#else
+    return 0U;
+#endif
+}
+
+uint32_t Bridge_GetSnapHashMismatch(void)
+{
+#if ROLE_IS_GW
+    return s_snap_hash_mismatch;
 #else
     return 0U;
 #endif

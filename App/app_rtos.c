@@ -37,6 +37,7 @@
 #include "node_app.h"
 #endif
 #include "bridge.h"
+#include "uplink_port.h"
 
 /*====================================================================*/
 /* Task parameters (docs/02 §3)                                       */
@@ -47,12 +48,14 @@
 #define STACK_BRIDGE     512U
 #define STACK_LOG        512U
 #define STACK_UI        1024U
+#define STACK_UPLINK    1024U
 #define STACK_CONSOLE    512U
 
 #define PRIO_WDT           6
 #define PRIO_CAN           5
 #define PRIO_MB            5
 #define PRIO_BRIDGE        4
+#define PRIO_UPLINK        3
 #define PRIO_LOG           2
 #define PRIO_UI            1
 #define PRIO_CONSOLE       2
@@ -172,6 +175,16 @@ static void BridgeTask(void *arg)
 }
 
 /*====================================================================*/
+/* T4 - uplink_task (gateway only in v1: M1 frames / M2 MQTT-C)        */
+/*====================================================================*/
+static void UplinkTask(void *arg)
+{
+    (void)arg;
+
+    Uplink_TaskMain();   /* Gateway/uplink_port.c; never returns */
+}
+
+/*====================================================================*/
 /* T5 - log_task                                                       */
 /*====================================================================*/
 static void LogTask(void *arg)
@@ -247,6 +260,9 @@ static const hb_watch_t s_watch[] =
     { APP_HB_CAN,     300U },   /* 10 ms loop                     */
     { APP_HB_MB,      300U },   /* 1 ms loop                      */
     { APP_HB_BRIDGE,  300U },   /* 10 ms loop                     */
+#if ROLE_IS_GW
+    { APP_HB_UPLINK, 3000U },   /* 100 ms loop; M2 will block in AT/MQTT */
+#endif
     { APP_HB_LOG,    4000U },   /* flash erase worst case ~400 ms */
     { APP_HB_UI,     2500U },   /* 500 ms refresh + full clear    */
     { APP_HB_CONSOLE,3000U },   /* 10 ms loop                     */
@@ -383,11 +399,15 @@ void App_RtosInit(void)
 
     LOG_SVC_Init();
     BSP_Printf_Init();
+    Uplink_Init();
 
     (void)xTaskCreate(WdtTask,     "wdt", STACK_WDT,     0, PRIO_WDT,     0);
     (void)xTaskCreate(CanTask,     "can", STACK_CAN,     0, PRIO_CAN,     0);
     (void)xTaskCreate(MbTask,      "mb",  STACK_MB,      0, PRIO_MB,      0);
     (void)xTaskCreate(BridgeTask,  "brg", STACK_BRIDGE,  0, PRIO_BRIDGE,  0);
+#if ROLE_IS_GW
+    (void)xTaskCreate(UplinkTask,  "upl", STACK_UPLINK,  0, PRIO_UPLINK,  0);
+#endif
     (void)xTaskCreate(LogTask,     "log", STACK_LOG,     0, PRIO_LOG,     0);
     (void)xTaskCreate(UiTask,      "ui",  STACK_UI,      0, PRIO_UI,      0);
     (void)xTaskCreate(ConsoleTask, "con", STACK_CONSOLE, 0, PRIO_CONSOLE, 0);

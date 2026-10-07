@@ -31,6 +31,7 @@
 #include "log_service.h"
 #include "modbus_register.h"
 #include "uds.h"
+#include "uplink_port.h"
 
 #include "main.h"
 
@@ -117,6 +118,10 @@ static void Cmd_Stats(void)
                (unsigned long)Bridge_GetSnapAgeMs(),
                (unsigned)Bridge_GetLastCmdResult(),
                (unsigned)Bridge_GetLastCmdExc());
+    BSP_Printf("uplink frames=%lu drops=%lu hash_mismatch=%lu\r\n",
+               (unsigned long)Uplink_GetFrameCount(),
+               (unsigned long)Uplink_GetDropCount(),
+               (unsigned long)Bridge_GetSnapHashMismatch());
 #endif
     BSP_Printf("wdt task_ovr=%lu (must stay 0) reset=0x%02lX (bit0 pin/1 sw/2 iwdg/4 bor)\r\n",
                (unsigned long)App_GetTaskOvr(),

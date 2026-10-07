@@ -306,7 +306,10 @@
 #define MQTT_KEEPALIVE_S         30u
 #define MQTT_QOS_TELEMETRY       0
 #define MQTT_QOS_DEFAULT         1
-#define MQTT_SEND_BUF            896u
+/* v0.5 实测修正：docs/03 §5.1 估 meta≈640 B，实测 1405 B（55 条 dp 描述
+ * 平均 ~24 B/条）。发送缓冲按 meta 定，1536 留头/边界余量。
+ * 静止数组，禁止 malloc（docs/03 §5.1）。 */
+#define MQTT_SEND_BUF            1536u
 #define MQTT_RECV_BUF            256u
 #define MQTT_TOPIC_PREFIX        "gac/line1/gwA"
 #define MQTT_BROKER_HOST         "192.168.1.100"   /* TODO: PC LAN IPv4 */

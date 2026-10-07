@@ -29,6 +29,7 @@ typedef enum
     APP_HB_UI,
     APP_HB_CONSOLE,
     APP_HB_BRIDGE,
+    APP_HB_UPLINK,
     APP_HB_COUNT
 } app_hb_t;
 
