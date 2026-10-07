@@ -115,7 +115,7 @@ int main(void)
    * can fire, and the log/config queues are used by every task. */
   App_RtosInit();
 
-  /* CAN backbone: FDCAN1 on PD0/PD1.  Its low-level init lives in
+  /* CAN backbone: FDCAN2 on PB12/PB13 (silk).  Its low-level init lives in
    * Core/Src/stm32g4xx_hal_msp.c (HAL_FDCAN_MspInit) because HAL_FDCAN_Init
    * depends on that callback - it is the one peripheral that does not follow
    * the "BSP self-init" convention used by the USART/SPI/I2C drivers. */

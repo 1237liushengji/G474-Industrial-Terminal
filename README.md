@@ -15,18 +15,17 @@ v1.0 仅差硬件验收**（清单见 docs/迁移说明 §14.2 与 README 验收
         Wi-Fi 2.4G  │ (设备侧 MQTT-C)          USB-TTL  │ (console + 可选影子网关)
                     │                                     │
  ┌──────────────────┴──── A 板 · GATEWAY ────────────────┴────────────────────┐
- │ USART2/PD5,PD6 → RS485 模块 → Modbus RTU 主站 ═══ RS485 总线(A/B) ═══┐      │
- │ USART3/PB10,PB11 → ESP-12F #1 → MQTT-C 设备侧上云                     │      │
- │ FDCAN1/PD0,PD1 → CAN 收发器 ─────── CAN 500 kbit/s ──────────────────┼──┐   │
- │ SPI2/PB12-PB15 → 板载 W25Q128 16MB：事件日志 + MQTT 待发缓存           │  │   │
+ │ USART3/PB10,PB11 → 485 收发器 → Modbus RTU 主站 ═══ RS485 总线(A/B) ═══┐      │
+ │ LPUART1/PB10,PB11 → 板载 ESP8266 → MQTT-C 设备侧上云（M2 形态）        │      │
+ │ FDCAN2/PB12,PB13 → CAN 收发器 ─────── CAN 500 kbit/s ──────────────────┼──┐   │
+ │ SPI1/PA4-PA7 → 板载 W25Q128 16MB：事件日志 + MQTT 待发缓存             │  │   │
  │ I2C1/PA15,PB9 → 24C02（网关参数）                                     │  │   │
- │ LCD(ST7789 1.69″) + LED PC0 + KEY PD15            + IWDG             │  │   │
+ │ LCD(PB3/PB5/PD11-13) + LED PE0/PE1 + KEY PA0/PA2/PA3 + IWDG           │  │   │
  └───────────────────────────────────────────────────────────────────────┘  │   │
                                                                             │   │
  ┌──────────────────────── B 板 · NODE ──────────────────────────────────────┴───┴──┐
- │ USART2/PD5,PD6 → RS485 模块 → Modbus RTU 从站 ═══════════════════════════ RS485 总线 │
- │ USART3/PB10,PB11 → ESP-12F #2（可选：第二条上云通道）                              │
- │ FDCAN1/PD0,PD1 → CAN 收发器；SPI2 → 板载 16MB Flash；I2C1 → 24C02                  │
+ │ USART3/PB10,PB11 → 485 收发器 → Modbus RTU 从站 ═══════════════════════════ RS485 总线 │
+ │ FDCAN2/PB12,PB13 → CAN 收发器；SPI1/PA4-7 → 板载 16MB Flash；I2C1 → 24C02          │
  │ LCD + LED + KEY + 本地采集 + 离线自治（A 板掉线时仍独立工作）                        │
  └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -35,17 +34,15 @@ v1.0 仅差硬件验收**（清单见 docs/迁移说明 §14.2 与 README 验收
 
 ## 三条先读结论
 
-1. **板载 W25Q128 与 FDCAN2 抢 PB12/PB13，二者只能留一个。** 板载 Flash 接在 `PB12(CS#)/PB13(CLK)/PB14(DO)/PB15(DI)`（SPI2），
-   而数据手册 Table 12 明确 `PB12=FDCAN2_RX`、`PB13=FDCAN2_TX`。裁决：**CAN 改用 FDCAN1 on PD0/PD1（J1 19/20）**，
-   保住板载 16MB Flash。详见 [docs/07](docs/07-板级硬件核对与冲突修正.md) §4 C1。
-2. **板上没有 RS485 收发器、没有 WiFi 座、没有 USB 转串口芯片、没有 EEPROM。** 原理图器件清单只有
-   MCU / AMS1117 LDO / W25Q128 / USB-C / LCD 排线座 / SWD 座 / IO 引出排针 / LED / 按键 / 晶振。
-   RS485 与 ESP-12F 都是**外接模块走排针接线** —— 所以原先"RS485 与 WiFi 互斥"不是死结：
-   **RS485 改接 USART2(PD5,PD6)，ESP-12F 留在 USART3(PB10,PB11)，两条链路并存。**
-   注意 USART2 的默认对 PA2/PA3 在本板为空闲（按键实为 PD15——2026-10-07 原理图复核），RS485 仍取经 J1 引出的 PD5/PD6。详见 [docs/07](docs/07-板级硬件核对与冲突修正.md) §4 C2/C3。
-3. **两个既有工程真正被硬件验证过的部分比想象少。** Modbus v2.0 的验收矩阵里，从站掉电、24C02、W25Q128、
-   LCD、串口 五项标的是"待真机"。而且它的 Flash 驱动写在 `SPI1/PA4-PA7` —— **那组引脚上没有 Flash 芯片**，
-   板载 Flash 在 `SPI2/PB12-PB15`。这解释了它为何一直是"待真机"。详见 [docs/06](docs/06-资产复用与冲突消解.md) §3。
+1. **一切以实物丝印为准（原理图 PDF 与实物不符，已降级）。** 丝印 + 两个原工程实机跑通给出最终引脚：
+   CAN=FDCAN2 `PB12/PB13`（跳线帽）、485=USART3 `PB10/PB11`（跳线帽）、WiFi=LPUART1 `PB10/PB11`（跳线帽，
+   方向与 485 镜像）、Flash=SPI1 `PA4-PA7`、24C02=I2C1 `PA15/PB9`、LCD=`PB3/PB5/PD11/12/13`、
+   按键=`PA0/PA2/PA3`、LED=`PE0/PE1`。详见 [迁移说明 §17](docs/迁移说明.md)。
+2. **唯一的 IO 冲突：485 与 WiFi 共用 PB10/PB11 跳线帽（二选一），且分属不同 UART。** 消解靠角色分工：
+   **B 板插 485（Modbus 从站），A 板 M1 插 485 / M2 插 WiFi**，A↔B 数据面统一走 CAN（PB12/13 独立通道）。
+   两块板都插 CAN 跳线帽。详见 [迁移说明 §17](docs/迁移说明.md)。
+3. **两个原工程按丝印实机跑通**：`E://STM32//CAN//阶段3_v3.0`（FDCAN2/PB12-13）与 `D://DSH//Modbus-RTU`
+   （USART3/PB10-11、SPI1/PA4-7）——本项目现按同一套引脚对齐，上板即可复用其验证成果。
 
 ## 文档索引
 
@@ -84,13 +81,13 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 | 项 | 值 |
 |---|---|
 | MCU | STM32G474VETx，512 KB Flash / 128 KB SRAM，SYSCLK 150 MHz（HSE 8 MHz→PLL /2 ×75 /2），APB 全 /1 |
-| 板卡资料 | STM32G474VET6 数据手册 + STM32G474VET6V1.1 原理图（2026-10-07 逐网络复核：KEY=PD15、LED=PC0；其余引脚全部对上，见迁移说明 §16） |
+| 板卡资料 | STM32G474VET6 数据手册 + **实物正反面丝印照片（最终权威，2026-10-07 终审）**；`STM32G474VET6V1.1原理图.pdf` 经查与实物不符（见迁移说明 §17） |
 | RTOS | FreeRTOS-Kernel **V10.5.1**（`Middlewares/`，GCC/ARM_CM4F 端口适配 ARMCLANG V6.14）；HAL 时基 = TIM6，SysTick 归内核 |
 | IDE | Keil MDK，ARMCLANG V6.14，DFP `STM32G4xx_DFP 2.2.0`，HAL **V1.2.3**（锁版本，勿顺手升级） |
 | PC | Windows 11 22631；Python 3.14.7（`pyserial` / `pypdf` / `pypdfium2`）；Node v26.7.0 |
 | Broker | Mosquitto 2.1.2 源码在 `E:\Edge\mosquitto-2.1.2`（**尚无二进制，需安装或自编译**）；开发/CI 用 pip `amqtt`（`Tools/python/test_shadow_e2e.py` 内建） |
 | 手柄串口 | 当前 0 个 COM 口（板子未接线） |
-| **已持有** | USB-TTL 串口线 ✅、外接 24C02 模块 ✅、外接 W25Q 模块 ✅、ESP-12F ×2 ✅、板卡原理图 + MCU 数据手册 ✅（2026-10-07 已逐网络核对） |
+| **已持有** | USB-TTL 串口线 ✅、外接 24C02 模块 ✅、外接 W25Q 模块 ✅、板卡实物丝印照片 ✅ + MCU 数据手册 ✅（板载 ESP8266 焊装、24C02/W25Q128 板上都有） |
 | **未持有** | USB-RS485 ❌（仅影响 A-06/A-11 的验收自动化，**不阻塞运行**）、USB-CAN ❌（可选） |
 | 容器环境 | **无容器引擎**，且本项目不需要。已装的是 `Docker Sandboxes 0.43.0`（`Docker.sbx`，AI 代理隔离工具，`sbx.exe` 在 `%LOCALAPPDATA%\DockerSandboxes\bin`，非容器引擎）。broker 走原生 Mosquitto |
 

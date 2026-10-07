@@ -11,9 +11,7 @@
   *  v1.0 UI: 3 pages on the SPI TFT LCD
   *    HOME    - device info + live measurands + comm counters
   *    ERROR   - CRC / exception counters
-  *    CONFIG  - editable parameters via the single on-board key (K0):
- *              short = move item / step value, long = edit / save;
- *              K1 / WKUP still work if the optional keys are wired
+  *    CONFIG  - editable parameters (K1 modify, WKUP confirm+save)
   *  Key K0 cycles pages. Parameters edited here go through the register
   *  bank -> auto-saved to 24C02 via log_task (LOG_SVC_PostConfigSave).
   ******************************************************************************
@@ -198,7 +196,7 @@ static void UI_DrawHomeStatic(void)
     LCD_Print(10, 11, "EXC:", LCD_COLOR_RED, LCD_COLOR_BLACK);
 
     LCD_Print(12, 0, "STATUS:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
-    LCD_Print(15, 0, "K0:next hold:cfg", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+    LCD_Print(15, 0, "K0:next K1:edit", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
 }
 
 /* value fields refreshed every 500 ms */
@@ -255,7 +253,7 @@ static void UI_DrawErrorStatic(void)
     LCD_Print(4, 0, "RX TOTAL  :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
     LCD_Print(5, 0, "LAST ERR  :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
 
-    LCD_Print(8, 0, "K0:next hold:cfg", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+    LCD_Print(8, 0, "K0:next page", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
 }
 
 static void UI_DrawErrorValues(void)
@@ -294,7 +292,7 @@ static void UI_DrawLinkStatic(void)
     LCD_Print(9, 0, "UPTIME :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
     LCD_Print(10, 0, "HEAP   :", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
     LCD_Print(11, 0, "TASK OVR:", LCD_COLOR_WHITE, LCD_COLOR_BLACK);
-    LCD_Print(15, 0, "K0:next hold:cfg", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+    LCD_Print(15, 0, "K0:next K1:edit", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
 }
 
 static void UI_DrawLinkValues(void)
@@ -382,13 +380,12 @@ static void UI_DrawConfig(void)
     }
     if (s_editing)
     {
-        LCD_Print(8, 0, "K0:value hold:save", LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
-        LCD_Print(9, 0, "                    ", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+        LCD_Print(8, 0, "K0:item K1:value", LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
+        LCD_Print(9, 0, "WKUP:save", LCD_COLOR_YELLOW, LCD_COLOR_BLACK);
     }
     else
     {
-        LCD_Print(8, 0, "K0:item hold:edit", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
-        LCD_Print(9, 0, "K1/WKUP opt. keys  ", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
+        LCD_Print(8, 0, "K0:next K1:edit", LCD_COLOR_GRAY, LCD_COLOR_BLACK);
     }
 }
 
@@ -419,48 +416,7 @@ static void UI_DrawConfigValues(void)
 /*====================================================================*/
 static void UI_HandleKey(key_event_t ev, key_id_t key)
 {
-    /* Key map (schematic V1.1): ONE on-board key = K0 (PD15, active low).
-     *   short: next page / move item / step value
-     *   long : enter edit / save / jump to CONFIG
-     * K1 and WKUP only exist when the optional external keys are wired
-     * (J2 pins 37/42, app_board_cfg.h §9) and keep the legacy behaviour. */
-    if (ev == KEY_EVENT_LONG)
-    {
-        switch (key)
-        {
-            case KEY_K0:
-                if (s_page == UI_PAGE_CONFIG)
-                {
-                    if (!s_editing)
-                    {
-                        s_editing = 1U;      /* enter edit at the cursor */
-                    }
-                    else
-                    {
-                        s_editing = 0U;      /* confirm & leave edit      */
-                    }
-                }
-                else
-                {
-                    s_page = UI_PAGE_CONFIG; /* shortcut to the cfg page */
-                }
-                s_ui_redraw = 1U;
-                break;
-
-            case KEY_WKUP:                   /* optional external key */
-                if ((s_page == UI_PAGE_CONFIG) && s_editing)
-                {
-                    s_editing = 0U;
-                    s_ui_redraw = 1U;
-                }
-                break;
-
-            default:
-                break;
-        }
-        return;
-    }
-
+    (void)ev;
     switch (key)
     {
         case KEY_K0:
@@ -468,30 +424,25 @@ static void UI_HandleKey(key_event_t ev, key_id_t key)
             {
                 if (s_editing)
                 {
-                    /* step the highlighted item */
-                    uint16_t addr = s_cfg_items[s_cfg_cursor].addr;
-                    uint16_t cur = MB_REG_GetHolding(addr);
-                    MB_REG_SetHolding(addr, CfgStep(addr, cur));
+                    /* in edit mode K0 moves the highlight to the next
+                       editable item (TempLimit->VoltLimit->...->BaudIdx) */
+                    s_cfg_cursor = (uint8_t)((s_cfg_cursor + 1U) % CFG_ITEM_COUNT);
                 }
                 else
                 {
-                    /* move cursor; pressing past the last item leaves */
-                    s_cfg_cursor++;
-                    if (s_cfg_cursor >= CFG_ITEM_COUNT)
-                    {
-                        s_cfg_cursor = 0U;
-                        s_page = (ui_page_t)((s_page + 1U) % UI_PAGE_COUNT);
-                    }
+                    /* not editing: K0 leaves the config page as usual */
+                    s_page = (ui_page_t)((s_page + 1U) % UI_PAGE_COUNT);
                 }
             }
             else
             {
+                /* on other pages K0 cycles pages */
                 s_page = (ui_page_t)((s_page + 1U) % UI_PAGE_COUNT);
             }
             s_ui_redraw = 1U;
             break;
 
-        case KEY_K1:                         /* optional external key */
+        case KEY_K1:
             if (s_page == UI_PAGE_CONFIG)
             {
                 if (!s_editing)
@@ -501,10 +452,20 @@ static void UI_HandleKey(key_event_t ev, key_id_t key)
                 }
                 else
                 {
+                    /* adjust the currently highlighted item */
                     uint16_t addr = s_cfg_items[s_cfg_cursor].addr;
                     uint16_t cur = MB_REG_GetHolding(addr);
                     MB_REG_SetHolding(addr, CfgStep(addr, cur));
                 }
+                s_ui_redraw = 1U;
+            }
+            break;
+
+        case KEY_WKUP:
+            if ((s_page == UI_PAGE_CONFIG) && s_editing)
+            {
+                /* confirm: exit edit; registers are auto-saved by config */
+                s_editing = 0U;
                 s_ui_redraw = 1U;
             }
             break;

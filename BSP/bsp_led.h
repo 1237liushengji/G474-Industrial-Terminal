@@ -23,8 +23,9 @@
 #include "main.h"
 #include "app_board_cfg.h"
 
-/* LED_PORT / LED1_PIN come from app_board_cfg.h (PC0, active low) */
+/* LED_PORT / LED1_PIN / LED2_PIN come from app_board_cfg.h (PE0/PE1) */
 #define LED1_PORT           LED_PORT
+#define LED2_PORT           LED_PORT
 
 #define LED_SET(pin)        ((LED_PORT)->BSRR = (uint32_t)(pin))
 #define LED_CLR(pin)        ((LED_PORT)->BSRR = (uint32_t)(pin) << 16U)
@@ -42,12 +43,9 @@
 #define LED1_OFF            LED_SET(LED1_PIN)
 #define LED1_Toggle         LED_TOGGLE(LED1_PIN)
 
-/* LED2 has no GPIO on the board (the white LED is hard-wired power; see
- * app_board_cfg.h §9) - the legacy link/activity call sites become no-ops
- * and the application code stays untouched. */
-#define LED2_ON             do { } while (0)
-#define LED2_OFF            do { } while (0)
-#define LED2_Toggle         do { } while (0)
+#define LED2_ON             LED_CLR(LED2_PIN)
+#define LED2_OFF            LED_SET(LED2_PIN)
+#define LED2_Toggle         LED_TOGGLE(LED2_PIN)
 
 /** Configure both LED pins as push-pull outputs, both OFF on entry. */
 void LED_Init(void);

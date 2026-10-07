@@ -111,8 +111,8 @@ void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* fdcanHandle)
     CAN_GPIO_CLK_ENABLE();
     CAN_CLK_ENABLE();
 
-    /* FDCAN1: PD0 = RX (to transceiver CTX), PD1 = TX (to transceiver CRX).
-     * AF9 per DS12288 Rev6 Table 13, Port D. */
+    /* FDCAN2 (silk): PB12 = RX (to transceiver CTX), PB13 = TX (to CRX).
+     * AF9 per DS12288 Table 13, Port B. */
     GPIO_InitStruct.Pin       = CAN_RX_PIN | CAN_TX_PIN;
     GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull      = GPIO_NOPULL;

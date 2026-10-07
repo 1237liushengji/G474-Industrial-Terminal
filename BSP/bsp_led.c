@@ -12,9 +12,10 @@ void LED_Init(void)
 
     LED_GPIO_CLK_ENABLE();
 
-    /* Drive the pin high (active low -> OFF) before switching to output,
-     * so no glitch is visible while the output is being enabled. */
+    /* Drive both pins high (active low -> OFF) before switching to output,
+     * so no glitch is visible while the outputs are being enabled. */
     LED1_OFF;
+    LED2_OFF;
 
     gpio.Mode  = GPIO_MODE_OUTPUT_PP;
     gpio.Pull  = GPIO_NOPULL;
@@ -22,4 +23,7 @@ void LED_Init(void)
 
     gpio.Pin = LED1_PIN;
     HAL_GPIO_Init(LED1_PORT, &gpio);
+
+    gpio.Pin = LED2_PIN;
+    HAL_GPIO_Init(LED2_PORT, &gpio);
 }

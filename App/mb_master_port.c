@@ -35,6 +35,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#if (FORM_MODE == FORM_M1)
+
 #ifndef MASTER_SLAVE_ID_DEFAULT
 #define MASTER_SLAVE_ID_DEFAULT  1U
 #endif
@@ -220,3 +222,28 @@ void Master_TaskMain(void)
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
     }
 }
+
+#else  /* ================= FORM M2: Modbus master retired ================= */
+
+void Master_TaskMain(void)
+{
+    config_param_t cfg;
+
+    /* On form M2 the 485 jumper caps carry the Wi-Fi group - PB10/PB11
+     * belong to LPUART1 (ESP-AT) and USART3 must stay untouched.  The
+     * A-side Modbus master is retired: the CAN bridge is the data plane,
+     * and the PC tool takes the 485 master role when needed
+     * (docs/迁移说明 §17).  The 24C02 config read stays (A-13). */
+    (void)CONFIG_Init(&cfg);
+    CONFIG_ApplyToRegisters(&cfg);
+    MB_REG_ClearConfigDirty();
+
+    for (;;)
+    {
+        App_Hb_Beat(APP_HB_MB);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+#endif /* FORM_MODE */
+

@@ -1,13 +1,14 @@
 /**
   ******************************************************************************
   * @file    bsp_w25q128.c
-  * @brief   W25Q128JV driver over SPI2 - this is the ON-BOARD flash (U3).
-  *          CS = PB12 (GPIO soft NSS), SCK = PB13, MISO = PB14, MOSI = PB15, AF5.
+  * @brief   W25Q128JV driver over SPI1 - this is the ON-BOARD flash (U3).
+  *          CS = PA4 (GPIO soft NSS), SCK = PA5, MISO = PA6, MOSI = PA7, AF5.
   *          BSP self-init, HAL SPI polling mode.
   * @note    Pins and instance come from app_board_cfg.h (FLASH_* macros).
-  *          The original Modbus project drove this driver on SPI1/PA4-PA7, where
-  *          there is no flash chip at all - which is why it never passed its
-  *          on-hardware acceptance.  The chip really sits on SPI2.
+  *          Back silk: "SPI1_CS_PA4 / SCK_PA5 / MISO_PA6 / MOSI_PA7" - the
+  *          original Modbus project's wiring, hardware-proven.  A short-lived
+  *          2026-10 edit moved this driver to SPI2/PB12-15 based on a
+  *          schematic that does NOT describe these boards; reverted (docs §17).
   *
   *          A JEDEC ID check gates the whole driver: if the detected ID does not
   *          match FLASH_EXPECTED_JEDEC the driver goes inert (reads return 0xFF,

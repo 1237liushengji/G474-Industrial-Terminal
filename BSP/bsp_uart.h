@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    bsp_uart.h
-  * @brief   Register-level USART driver for RS485 link (USART2 on PD5/PD6)
+  * @brief   Register-level USART driver for RS485 link (USART3 on PB10/PB11)
   * @note    Self-contained init (clock + GPIO + NVIC), no CubeMX dependency.
   *          RX is interrupt driven; RX byte is delivered to a callback.
   *          TX has two paths:

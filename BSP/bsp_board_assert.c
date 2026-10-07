@@ -34,12 +34,9 @@ typedef struct
 
 static const pin_expect_t s_expect[] =
 {
-    /* CAN backbone (FDCAN1 on PD0/PD1, AF9) */
-    { GPIOD, GPIO_PIN_0,  0x2U, 9U, "CAN_RX PD0" },
-    { GPIOD, GPIO_PIN_1,  0x2U, 9U, "CAN_TX PD1" },
-    /* RS485 (USART2 on PD5/PD6, AF7) */
-    { GPIOD, GPIO_PIN_5,  0x2U, 7U, "RS485_TX PD5" },
-    { GPIOD, GPIO_PIN_6,  0x2U, 7U, "RS485_RX PD6" },
+    /* CAN backbone (FDCAN2 silk: PB12=RX, PB13=TX, AF9) */
+    { GPIOB, GPIO_PIN_12, 0x2U, 9U, "CAN_RX PB12" },
+    { GPIOB, GPIO_PIN_13, 0x2U, 9U, "CAN_TX PB13" },
     /* console (USART1 on PA9/PA10, AF7) */
     { GPIOA, GPIO_PIN_9,  0x2U, 7U, "CONSOLE_TX PA9" },
     { GPIOA, GPIO_PIN_10, 0x2U, 7U, "CONSOLE_RX PA10" },
@@ -52,16 +49,21 @@ static const pin_expect_t s_expect[] =
     { GPIOD, GPIO_PIN_11, 0x1U, 0xFFFFFFFFU, "LCD_CS PD11" },
     { GPIOD, GPIO_PIN_12, 0x1U, 0xFFFFFFFFU, "LCD_DC PD12" },
     { GPIOD, GPIO_PIN_13, 0x1U, 0xFFFFFFFFU, "LCD_BL PD13" },
-    /* user key + user LED (schematic V1.1; app_board_cfg.h §9) */
-    { GPIOD, GPIO_PIN_15, 0x0U, 0xFFFFFFFFU, "KEY_K0 PD15" },
-    { GPIOC, GPIO_PIN_0,  0x1U, 0xFFFFFFFFU, "LED1 PC0" },
-    /* optional external keys (quiet inputs when not wired) */
-    { GPIOA, GPIO_PIN_3,  0x0U, 0xFFFFFFFFU, "KEY_K1 PA3" },
+    /* keys: K0/K1 (PA2/PA3) pull-up, WKUP (PA0) pull-down (silk §17) */
     { GPIOA, GPIO_PIN_0,  0x0U, 0xFFFFFFFFU, "KEY_WKUP PA0" },
-#if (FORM_MODE == FORM_M2)
-    /* ESP-AT (USART3 on PB10/PB11, AF7) - only present/configured in M2 */
-    { GPIOB, GPIO_PIN_10, 0x2U, 7U, "ESP_TX PB10" },
-    { GPIOB, GPIO_PIN_11, 0x2U, 7U, "ESP_RX PB11" },
+    { GPIOA, GPIO_PIN_2,  0x0U, 0xFFFFFFFFU, "KEY_K0 PA2" },
+    { GPIOA, GPIO_PIN_3,  0x0U, 0xFFFFFFFFU, "KEY_K1 PA3" },
+    /* LEDs: PE0 blue / PE1 green, both outputs (active low) */
+    { GPIOE, GPIO_PIN_0,  0x1U, 0xFFFFFFFFU, "LED1 PE0" },
+    { GPIOE, GPIO_PIN_1,  0x1U, 0xFFFFFFFFU, "LED2 PE1" },
+    /* the shared PB10/PB11 jumper pads: the expected UART follows the form.
+     * M1 needs USART3 (485 caps); GW M2 / node use LPUART1-GW or USART3-B. */
+#if (ROLE_IS_GW && (FORM_MODE == FORM_M2))
+    { GPIOB, GPIO_PIN_11, 0x2U, 8U, "ESP_TX PB11 (LPUART1)" },
+    { GPIOB, GPIO_PIN_10, 0x2U, 8U, "ESP_RX PB10 (LPUART1)" },
+#else
+    { GPIOB, GPIO_PIN_10, 0x2U, 7U, "RS485_TX PB10 (USART3)" },
+    { GPIOB, GPIO_PIN_11, 0x2U, 7U, "RS485_RX PB11 (USART3)" },
 #endif
 };
 

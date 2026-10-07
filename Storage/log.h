@@ -24,7 +24,7 @@
 
 /* Configuration: 256 KB log area = 64 sectors, record 32 B -> 8192 recs.
  * v0.2: grown from 64 KB now that the on-board W25Q128 is actually driven on
- * the correct SPI2 bus (docs/07 §3/§6).  The power-up area scan is no longer
+ * the correct SPI1 bus (docs/07 §3/§6, 迁移说明 §17).  The power-up area scan is no longer
  * a boot blocker - it runs inside log_task (Storage/log_service.c). */
 #define LOG_AREA_SIZE      (256UL * 1024UL)
 #define LOG_RECORD_SIZE    32U

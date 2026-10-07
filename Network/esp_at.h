@@ -3,8 +3,10 @@
   * @file    esp_at.h
   * @brief   ESP-12F AT link driver + connection state machine (M2, v0.6).
   *
-  *  Hardware: USART3 on PB10(TX)/PB11(RX) (app_board_cfg §4).  There is no
-  *  on-board level shifter - PB10/PB11 are 3.3 V only (risk R-8).
+  *  Hardware: LPUART1 on PB10(RX)/PB11(TX) (app_board_cfg §4) - the Wi-Fi
+  *  jumper caps connect the on-board ESP8266 to this pair; PB10/PB11 are
+  *  3.3 V only (risk R-8).  The 485 caps use the SAME pads with the mirror
+  *  direction (USART3) - fit one group only (docs/迁移说明 §17).
   *
   *  State machine (docs/02 decision 5):
   *    DOWN -(backoff)-> RESET -> AT -> CWMODE -> JOIN -> CIPMUX -> CIPMODE
@@ -22,7 +24,7 @@
 
 #include <stdint.h>
 
-/** Bring up USART3 + RX ring (call once, before the scheduler is fine). */
+/** Bring up LPUART1 + RX ring (call once, before the scheduler is fine). */
 void Esp_Init(void);
 
 /** Drive the state machine; @retval 1 = pass-through active (link ready). */

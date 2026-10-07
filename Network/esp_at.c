@@ -50,10 +50,20 @@ void Esp_Init(void)
     gpio.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(ESP_RX_GPIO_PORT, &gpio);
 
-    /* USART3 is on APB1 */
+    /* LPUART1 is on APB1 (CCIPR reset default = PCLK1).  LPUART uses 256x
+     oversampling: BRR = 256*PCLK/baud (20-bit integer part). */
     ESP_UART_PERIPH->CR1 = 0U;
+#if (ESP_UART_IS_LPUART == 1)
+    {
+        uint32_t clk = HAL_RCC_GetPCLK1Freq();
+
+        ESP_UART_PERIPH->BRR = (uint32_t)
+            ((((uint64_t)clk * 256ULL) + (ESP_AT_BAUDRATE / 2U)) / ESP_AT_BAUDRATE);
+    }
+#else
     ESP_UART_PERIPH->BRR =
         (HAL_RCC_GetPCLK1Freq() + (ESP_AT_BAUDRATE / 2U)) / ESP_AT_BAUDRATE;
+#endif
     ESP_UART_PERIPH->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE
                          | USART_CR1_RXNEIE;
 

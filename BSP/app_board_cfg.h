@@ -3,8 +3,8 @@
   * @file    app_board_cfg.h
   * @brief   THE single point of change: board hardware + node role + link params
   * @note    Board : Genbotter / DRG ST-10 STM32G474VET6
-  *          Source: docs/07-板级硬件核对与冲突修正.md (authoritative)
-  *                  docs/04-板级配置点与资源预算.md
+  *          Source: back silkscreen + the two hardware-proven projects
+  *                  (docs/迁移说明 §17, authoritative) and docs/04.
   *          Rule  : no bare pin / baudrate / AF literal outside BSP/ (accept A-01)
   *
   *  Naming note: docs/07 §6 uses RS485_TX_GPIO_PIN / FLASH_CS_PORT_PIN for
@@ -19,24 +19,40 @@
 #include "main.h"   /* HAL handle types, GPIO symbols */
 
 /*==========================================================================*/
+/*==========================================================================*/
 /* 0. Wiring notice - read before the first flash of this firmware           */
 /*==========================================================================*/
-/* v0.2 runs FreeRTOS (see Core/Inc/FreeRTOSConfig.h).  The BOARD WIRING must
- * be moved to match the new pin map before anything will talk:
+/* 2026-10-07 SILKSCREEN FINAL (back-side silk photos + the two hardware-
+ * proven projects on these very boards; full record: docs/迁移说明 §17).
  *
- *   CAN transceiver : PB12/PB13  ->  PD0/PD1   (J1 pins 19/20)
- *   RS485 module    : PB10/PB11  ->  PD5/PD6   (J1 pins 24/25)
- *   ESP-12F         : stays on PB10/PB11       (J2 pins 20/17)
+ * The board has three JUMPER-CAP groups; caps decide the wiring:
  *
- * The RS485/WiFi jumper conflict disappears with this move - they no longer
- * share pins.  Sequence and rationale: docs/07 section 9.
+ *   CAN    caps : CAN_RX->PB12 , CAN_TX->PB13      (FDCAN2, AF9)
+ *                  -> v3.0 CAN+UDS project ran this on real hardware
+ *   --+ the 485 and WIFI groups share the SAME MCU pads PB10/PB11 +--
+ *   485 caps   : 485_RX->PB10 , 485_TX->PB11       (USART3, AF7)
+ *                  -> original Modbus-RTU project ran this on real hardware
+ *   WIFI caps  : WIFI_RX->PB11, WIFI_TX->PB10      (LPUART1, AF8,
+ *                  the mirror direction - deliberately a DIFFERENT UART)
+ *
+ * IO-CONFLICT RESOLUTION (per role, docs §17 matrix):
+ *   B board (node)      : 485 caps  -> Modbus RTU slave (PC USB-485 reads it)
+ *   A board form M2     : WIFI caps -> ESP-AT/MQTT uplink; A<->B data plane
+ *                         is CAN; the A-side Modbus master is retired there.
+ *   A board form M1     : 485 caps  -> Modbus master polls B; uplink via the
+ *                         PC shadow gateway on USART1.  No Wi-Fi needed.
+ *   Both boards         : CAN caps always on.
+ *   NEVER fit BOTH 485 and WIFI caps on one board - PB10/PB11 would fight.
+ *
+ * Other board facts (silk + proven projects): on-board W25Q128 on SPI1
+ * PA4-PA7; 24C02 on I2C1 PA15/PB9; LCD soft-SPI PB3/PB5/PD11/PD12/PD13;
+ * keys PA0/PA2/PA3; LEDs PE0/PE1.
  *
  * v0.2 status: console (USART1 + Common/bsp_printf.c) and UDS (Protocol/uds.c)
- * are now part of the build; the W25Q log area grew to 256 KB and its
- * power-up scan runs inside log_task.  Has NOT been run on hardware yet -
- * acceptance A-02/A-03/A-04/A-09/A-10 are the v0.2 exit conditions (docs/05). */
+ * are part of the build; the W25Q log area is 256 KB and its power-up scan
+ * runs inside log_task.  Not yet run on hardware - acceptance A-02..A-14 are
+ * the exit conditions (docs/05). */
 
-/*==========================================================================*/
 /* 1. Node role / form factor (injected by Keil target Define - do not edit)  */
 /*==========================================================================*/
 /*  Keil targets and their Define:
@@ -60,7 +76,10 @@
 #endif
 
 /* Form factor: M1 = PC shadow gateway publishes MQTT;  M2 = device-side MQTT-C
- * over ESP-12F.  Both use identical wiring (see docs/07 §5). */
+ * over the on-board ESP8266.  The form ALSO selects the jumper caps on the
+ * gateway: M1 -> 485 caps (Modbus master + PC uplink on USART1),
+ *             M2 -> WIFI caps (LPUART1 uplink; data plane via CAN).
+ * See the §0 notice and docs/迁移说明 §17. */
 #ifndef FORM_MODE
 #define FORM_MODE               2
 #endif
@@ -75,27 +94,19 @@
 #define FW_VERSION_BCD          0x100u                 /* 1.0.0 */
 
 /*==========================================================================*/
-/* 2. CAN - FDCAN1 on PD0(RX) / PD1(TX), AF9                                 */
 /*==========================================================================*/
-/* Why not FDCAN2 on PB12/PB13: those two pins are also the on-board W25Q128
- * CS#/CLK - it is either CAN or the on-board flash, not both.  Decision was to
- * keep the flash and move CAN.  See docs/07 §4 C1.
- * AF9 evidence: DS12288 Rev 6 Table 13, Port D (PD0/PD1 rows). */
+/* 2. CAN - FDCAN2 on PB12(RX) / PB13(TX), AF9 [silk + hardware-proven]      */
+/*==========================================================================*/
+/* Back silk: CAN_RX->PB12 / CAN_TX->PB13 (jumper caps) - exactly the pair
+ * the v3.0 CAN+UDS project ran on real hardware.  The 2026-09 "PB12/PB13
+ * conflict with the on-board W25Q128" was based on a schematic that does NOT
+ * describe these boards (flash is really on SPI1/PA4-PA7).  See §17.
+ * AF9 evidence: DS12288 Table 13 (PB12=FDCAN2_RX, PB13=FDCAN2_TX). */
 #ifndef CAN_USE_FDCAN
-#define CAN_USE_FDCAN           1           /* 1=FDCAN1(PD0/PD1)  2=FDCAN2 fallback */
+#define CAN_USE_FDCAN           2           /* 2=FDCAN2 PB12/13 (silk), 1=FDCAN1 PD0/PD1 spare */
 #endif
 
-#if (CAN_USE_FDCAN == 1)
-  #define CAN_PERIPH            FDCAN1
-  #define CAN_RX_GPIO_PORT      GPIOD
-  #define CAN_RX_PIN            GPIO_PIN_0
-  #define CAN_TX_GPIO_PORT      GPIOD
-  #define CAN_TX_PIN            GPIO_PIN_1
-  #define CAN_GPIO_CLK_ENABLE() __HAL_RCC_GPIOD_CLK_ENABLE()
-  #define CAN_AF                GPIO_AF9_FDCAN1
-  #define CAN_IRQn              FDCAN1_IT0_IRQn
-  #define CAN_IRQ_HANDLER       FDCAN1_IT0_IRQHandler
-#else
+#if (CAN_USE_FDCAN == 2)
   #define CAN_PERIPH            FDCAN2
   #define CAN_RX_GPIO_PORT      GPIOB
   #define CAN_RX_PIN            GPIO_PIN_12
@@ -105,10 +116,20 @@
   #define CAN_AF                GPIO_AF9_FDCAN2
   #define CAN_IRQn              FDCAN2_IT0_IRQn
   #define CAN_IRQ_HANDLER       FDCAN2_IT0_IRQHandler
+#else
+  #define CAN_PERIPH            FDCAN1
+  #define CAN_RX_GPIO_PORT      GPIOD
+  #define CAN_RX_PIN            GPIO_PIN_0
+  #define CAN_TX_GPIO_PORT      GPIOD
+  #define CAN_TX_PIN            GPIO_PIN_1
+  #define CAN_GPIO_CLK_ENABLE() __HAL_RCC_GPIOD_CLK_ENABLE()
+  #define CAN_AF                GPIO_AF9_FDCAN1
+  #define CAN_IRQn              FDCAN1_IT0_IRQn
+  #define CAN_IRQ_HANDLER       FDCAN1_IT0_IRQHandler
 #endif
 #define CAN_CLK_ENABLE()        __HAL_RCC_FDCAN_CLK_ENABLE()
 
-/* Bit timing - taken as-is from the hardware-verified CAN v3.0:
+/* Bit timing - taken as-is from the hardware-verified CAN v3.0 (FDCAN2):
  * PCLK1 = 150 MHz, Prescaler 30 -> tq = 200 ns, 10 tq/bit -> 2 us -> 500 kbit/s
  * sample point (1+7)/10 = 80 %, SJW 2 (<= min(Seg1,Seg2)+1 = 3) */
 #define CAN_BITRATE             500000UL
@@ -125,38 +146,40 @@
 #define CAN_BACKOFF_MAX_MS      30000u
 
 /*==========================================================================*/
-/* 3. RS485 / Modbus - USART2 on PD5(TX) / PD6(RX), AF7                      */
+/* 3. RS485 / Modbus - USART3 on PB10(TX) / PB11(RX), AF7 [silk + proven]    */
 /*==========================================================================*/
-/* Why not USART3 on PB10/PB11: those pins are given to the ESP-12F (silk-
- * screened position).  Why not USART2's default PA2/PA3: those are user keys
- * K0/K1.  So PD5/PD6 - the only usable USART2 data pair on port D.
- * See docs/07 §4 C2/C3.  AF7 evidence: DS12288 Table 13, Port D. */
-#define RS485_UART_PERIPH        USART2
-#define RS485_UART_IRQn          USART2_IRQn
-#define RS485_UART_IRQHandler    USART2_IRQHandler
-#define RS485_UART_CLK_ENABLE()  __HAL_RCC_USART2_CLK_ENABLE()
+/* Back silk: 485_RX->PB10 / 485_TX->PB11 via jumper caps; the original
+ * Modbus-RTU project drove exactly this pair as register-level USART3 and is
+ * hardware-proven.  "485_RX/TX" name the transceiver-side signals, so the
+ * MCU pin PB10 is its TX into the 485 input network.
+ * The caps share the pads with the WIFI group (LPUART1 direction, §4) -
+ * fit ONE group only (docs/迁移说明 §17). */
+#define RS485_UART_PERIPH        USART3
+#define RS485_UART_IRQn          USART3_IRQn
+#define RS485_UART_IRQHandler    USART3_IRQHandler
+#define RS485_UART_CLK_ENABLE()  __HAL_RCC_USART3_CLK_ENABLE()
 
-#define RS485_TX_GPIO_PORT       GPIOD
-#define RS485_TX_PIN             GPIO_PIN_5
-#define RS485_RX_GPIO_PORT       GPIOD
-#define RS485_RX_PIN             GPIO_PIN_6
-#define RS485_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOD_CLK_ENABLE()
-#define RS485_GPIO_AF            GPIO_AF7_USART2
+#define RS485_TX_GPIO_PORT       GPIOB
+#define RS485_TX_PIN             GPIO_PIN_10
+#define RS485_RX_GPIO_PORT       GPIOB
+#define RS485_RX_PIN             GPIO_PIN_11
+#define RS485_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOB_CLK_ENABLE()
+#define RS485_GPIO_AF            GPIO_AF7_USART3
 
 /* DMA, used only when RS485_RX_MODE == 1.  On G4 any DMA1 channel can serve
  * any request via DMAMUX, so the channel stays put and only the request line
  * changes together with the USART instance. */
 #define RS485_DMA_INSTANCE       DMA1_Channel2
-#define RS485_DMA_REQUEST        DMA_REQUEST_USART2_RX
+#define RS485_DMA_REQUEST        DMA_REQUEST_USART3_RX
 
-/* RX path: 0 = RXNE byte-wise interrupt (the only mode verified on hardware)
+/* RX path: 0 = RXNE byte-wise interrupt (the mode the original project ran)
  *          1 = DMA circular + IDLE                                         */
 #ifndef RS485_RX_MODE
 #define RS485_RX_MODE            0
 #endif
 
-/* Direction control: the RS485 transceiver is an external module and is
- * usually auto-direction.  Set to 1 if the module exposes DE/RE. */
+/* Direction control: the 485 transceiver sits behind the jumper caps and is
+ * auto-direction.  Set to 1 only if a DE/RE pin is ever wired. */
 #ifndef RS485_USE_DE_PIN
 #define RS485_USE_DE_PIN         0
 #endif
@@ -174,28 +197,35 @@
  * names is a v0.4 task (docs/06 conflict #6). */
 
 /*==========================================================================*/
-/* 4. ESP-12F (WiFi / MQTT uplink) - USART3 on PB10(TX) / PB11(RX), AF7       */
+/* 4. Wi-Fi (on-board ESP8266) - LPUART1 on PB10(RX) / PB11(TX), AF8         */
 /*==========================================================================*/
-/* WARNING (risk R-8): PB10/PB11 are TT type - 3.3 V tolerant ONLY.  The
- * ESP-12F is 3.3 V logic so it is safe, but a 5 V module here would be
- * over-volted.  See docs/07 §4 C7. */
-#define ESP_UART_PERIPH          USART3
-#define ESP_UART_IRQn            USART3_IRQn
-#define ESP_UART_IRQHandler      USART3_IRQHandler
-#define ESP_UART_CLK_ENABLE()    __HAL_RCC_USART3_CLK_ENABLE()
+/* Back silk: WIFI_RX->PB11 / WIFI_TX->PB10.  For the module the silk names
+ * the MODULE's pins: module RX <- PB11 (MCU TX), module TX -> PB10 (MCU RX).
+ * The MCU pair is therefore RX=PB10 / TX=PB11 = LPUART1 (AF8) - the MIRROR
+ * of the 485 group's direction, which is exactly why the two jumper groups
+ * exist on the same pads: 485=USART3, Wi-Fi=LPUART1 (docs/迁移说明 §17).
+ *
+ * WARNING (risk R-8): PB10/PB11 are TT type - 3.3 V tolerant ONLY.  The
+ * module is 3.3 V logic so it is safe. */
+#define ESP_UART_PERIPH          LPUART1
+#define ESP_UART_IRQn            LPUART1_IRQn
+#define ESP_UART_IRQHandler      LPUART1_IRQHandler
+#define ESP_UART_CLK_ENABLE()    __HAL_RCC_LPUART1_CLK_ENABLE()
 #define ESP_TX_GPIO_PORT         GPIOB
-#define ESP_TX_PIN               GPIO_PIN_10
+#define ESP_TX_PIN               GPIO_PIN_11
 #define ESP_RX_GPIO_PORT         GPIOB
-#define ESP_RX_PIN               GPIO_PIN_11
+#define ESP_RX_PIN               GPIO_PIN_10
 #define ESP_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOB_CLK_ENABLE()
-#define ESP_GPIO_AF              GPIO_AF7_USART3
+#define ESP_GPIO_AF              GPIO_AF8_LPUART1
 #define ESP_AT_BAUDRATE          115200UL
+/* LPUART uses 256x oversampling: BRR = 256*PCLK/baud (esp_at.c branches on
+ * this flag).  LPUART1 clock source = PCLK1 (CCIPR reset default). */
+#define ESP_UART_IS_LPUART       1
 /* Wi-Fi credentials for M2 (device-side uplink).  The PC side runs a 2.4 GHz
  * hotspot with these credentials; keep the strings short (AT+CWJAP line). */
 #define ESP_WIFI_SSID            "YOUR_SSID"
 #define ESP_WIFI_PASSWORD        "YOUR_PASSWORD"
 
-/*==========================================================================*/
 /* 5. Console - USART1 on PA9(TX) / PA10(RX), AF7                            */
 /*==========================================================================*/
 /* There is NO on-board USB-UART bridge.  PA9/PA10 are broken out to J1 pin
@@ -216,28 +246,28 @@
 #define CONSOLE_TX_POOL_NUM      4u
 
 /*==========================================================================*/
-/* 6. On-board W25Q128 (SPI2) - 16 MB, SPI mode (IO2/IO3 tied high, not QSPI) */
 /*==========================================================================*/
-/* The single most important correction of the board audit: the original
- * Modbus project drove its flash on SPI1/PA4-PA7, but there is no flash chip
- * on those pins - the chip sits on SPI2.  That is why it stayed "untested on
- * hardware" forever.  See docs/07 §3 / §4 C1.
- * CS is a GPIO soft chip-select; SCK/MISO/MOSI use AF5. */
-#define FLASH_SPI_PERIPH         SPI2
-#define FLASH_SPI_AF             GPIO_AF5_SPI2
-#define FLASH_SPI_CLK_ENABLE()   __HAL_RCC_SPI2_CLK_ENABLE()
-#define FLASH_CS_PORT            GPIOB
-#define FLASH_CS_PIN             GPIO_PIN_12
-#define FLASH_SCK_PORT           GPIOB
-#define FLASH_SCK_PIN            GPIO_PIN_13
-#define FLASH_MISO_PORT          GPIOB
-#define FLASH_MISO_PIN           GPIO_PIN_14
-#define FLASH_MOSI_PORT          GPIOB
-#define FLASH_MOSI_PIN           GPIO_PIN_15
-#define FLASH_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOB_CLK_ENABLE()
+/* 6. On-board W25Q128 (SPI1) - 16 MB, SPI mode (IO2/IO3 tied high, not QSPI) */
+/*==========================================================================*/
+/* Back silk: SPI1_CS_PA4 / SPI1_SCK_PA5 / SPI1_MISO_PA6 / SPI1_MOSI_PA7,
+ * matching the original Modbus project's wiring (CS = GPIO soft chip-select;
+ * SCK/MISO/MOSI = AF5).  The earlier change that moved this driver to
+ * "SPI2/PB12-15" came from a schematic that does NOT describe these boards -
+ * reverted, see docs/迁移说明 §17. */
+#define FLASH_SPI_PERIPH         SPI1
+#define FLASH_SPI_AF             GPIO_AF5_SPI1
+#define FLASH_SPI_CLK_ENABLE()   __HAL_RCC_SPI1_CLK_ENABLE()
+#define FLASH_CS_PORT            GPIOA
+#define FLASH_CS_PIN             GPIO_PIN_4
+#define FLASH_SCK_PORT           GPIOA
+#define FLASH_SCK_PIN            GPIO_PIN_5
+#define FLASH_MISO_PORT          GPIOA
+#define FLASH_MISO_PIN           GPIO_PIN_6
+#define FLASH_MOSI_PORT          GPIOA
+#define FLASH_MOSI_PIN           GPIO_PIN_7
+#define FLASH_GPIO_CLK_ENABLE()  __HAL_RCC_GPIOA_CLK_ENABLE()
 #define FLASH_EXPECTED_JEDEC     0xEF4018UL  /* W25Q128 = EF 40 18; verify at boot */
 
-/*==========================================================================*/
 /* 7. 24C02 (I2C1) - PA15(SCL) / PB9(SDA), AF4, external module              */
 /*==========================================================================*/
 /* WARNING: PA15 is JTDI out of reset.  The debugger MUST stay in SWD 2-pin
@@ -275,41 +305,31 @@
                                       __HAL_RCC_GPIOD_CLK_ENABLE(); } while (0)
 
 /*==========================================================================*/
-/* 9. Keys and LEDs - verified against schematic STM32G474VET6V1.1           */
 /*==========================================================================*/
-/* 2026-10-07 schematic re-audit (docs/07 head note + 迁移说明 §16), which
- * superseded the earlier PE0/PE1/PA2 mapping:
- * KEY : the board carries ONE user key SW2, wired PD15 -> GND (active low).
- *       No external pull-up on the KEY net (the 10k R8 belongs to BOOT0),
- *       so the MCU internal pull-up must be enabled - bsp_key.c already
- *       configures GPIO_PULLUP.  The single key runs the whole UI:
- *       short = next page / item / value, long = edit / save (node_app.c),
- *       short = snapshot, long = backfill sweep (gw_ui.c).
- *       K1 / WKUP are OPTIONAL external keys (not populated): solder a
- *       push-button to J2 pin 37 (PA3) / pin 42 (PA0) and they work with
- *       the legacy semantics.
- * LED : user LED = blue LED1, 3.3V -> R3 1.5k -> LED1 -> PC0, ACTIVE LOW.
- *       The white LED2 is the hard-wired power indicator (no GPIO). */
-#define KEY_K0_PORT              GPIOD
-#define KEY_K0_PIN               GPIO_PIN_15   /* on-board user key SW2     */
-#define KEY_K1_PORT              GPIOA
-#define KEY_K1_PIN               GPIO_PIN_3    /* optional key: J2 pin 37   */
+/* 9. Keys and LEDs - back silkscreen (final authority, docs §17)            */
+/*==========================================================================*/
+/* Silk:  WKUP_PA0   idle LOW, press drives HIGH (external pull-down)
+ *        K0_#PA2   # = active low (internal pull-up)
+ *        K1_#PA3   # = active low (internal pull-up)
+ *        BLUE_PE0 / GREEN_PE1 - active low ("低电平点亮")
+ * The original Modbus project used PA0/PA2/PA3 + PE0/PE1 on real hardware;
+ * it treated all three keys as active-low, which cannot be right for WKUP
+ * per silk - bsp_key.c now honours the per-key polarity. */
 #define KEY_WKUP_PORT            GPIOA
-#define KEY_WKUP_PIN             GPIO_PIN_0    /* optional key: J2 pin 42   */
-#define KEY_GPIO_CLK_ENABLE()    do { __HAL_RCC_GPIOD_CLK_ENABLE(); \
-                                      __HAL_RCC_GPIOA_CLK_ENABLE(); } while (0)
-/* KEY_DEBOUNCE_MS / KEY_LONG_MS stay owned by BSP/bsp_key.c (v0.1 keeps
- * module-local tunables where they already live; centralising them here is
- * a follow-up, not a restructure). */
+#define KEY_WKUP_PIN             GPIO_PIN_0    /* active HIGH (pull-down) */
+#define KEY_K0_PORT              GPIOA
+#define KEY_K0_PIN               GPIO_PIN_2    /* active low (pull-up)    */
+#define KEY_K1_PORT              GPIOA
+#define KEY_K1_PIN               GPIO_PIN_3    /* active low (pull-up)    */
+#define KEY_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOA_CLK_ENABLE()
+/* KEY_DEBOUNCE_MS / KEY_LONG_MS stay owned by BSP/bsp_key.c. */
 
-#define LED_PORT                 GPIOC
-#define LED1_PIN                 GPIO_PIN_0    /* user LED, blue, ACTIVE LOW */
-#define LED_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOC_CLK_ENABLE()
-/* Status LEDs must be written via atomic GPIOx->BSRR.  v3.0 once chased a
- * phantom "LED freeze" caused by the TogglePin/ODR read-modify-write path
- * losing writes under sniff load. */
+#define LED_PORT                 GPIOE
+#define LED1_PIN                 GPIO_PIN_0    /* blue,  active low */
+#define LED2_PIN                 GPIO_PIN_1    /* green, active low */
+#define LED_GPIO_CLK_ENABLE()    __HAL_RCC_GPIOE_CLK_ENABLE()
+/* Status LEDs must be written via atomic GPIOx->BSRR (v3.0 lesson). */
 
-/*==========================================================================*/
 /* 10. Uplink parameters (form factor M2)                                    */
 /*==========================================================================*/
 #define UPLINK_TELEMETRY_MS      1000u
@@ -361,10 +381,10 @@
  * priority than configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (= 5).
  * SysTick/PendSV/SVCall are owned by the kernel port and are not listed.
  *
- *   FDCAN1_IT0  (6,0)  was (1,0) on v3.0 hardware - ILLEGAL once FromISR is
+ *   FDCAN2_IT0  (6,0)  v3.0 ran this CAN at (1,0) - ILLEGAL once FromISR is
  *                      called from the RX callback; cost of the fix is
  *                      re-running acceptance A-03/A-04 (docs/05).
- *   USART1/2/3  (7,0)  console / RS485 / ESP-AT
+ *   USART1 / USART3 / LPUART1  (7,0)  console / RS485 / Wi-Fi AT
  *   TIM6_DAC    (8,0)  HAL time base, no FromISR calls needed
  *   EXTI0/2/3   (9,0)  reserved for interrupt-mode keys                          */
 #define IRQ_PRIO_CAN             6u

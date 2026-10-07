@@ -4,8 +4,8 @@
   * @brief   Dual-node CAN driver (classic CAN, RX FIFO0 + interrupt line 0)
   *
   * 硬件平台：STM32G474VET6 开发板 + SN65HVD230 收发器模块
-  * 引脚：PD0 = FDCAN1_RX（AF9，接收发器 CTX/TXD）、
-  *       PD1 = FDCAN1_TX（AF9，接收发器 CRX/RXD）
+  * 引脚：PB12 = FDCAN2_RX（AF9，接收发器 CTX/TXD）、
+  *       PB13 = FDCAN2_TX（AF9，接收发器 CRX/RXD）
   *       （DS12288 Rev6 Table 13 Port D；实例与引脚均由 app_board_cfg.h
   *        的 CAN_* 宏给出）
   * 为什么不用 FDCAN2/PB12,PB13：那两个脚同时是板载 W25Q128 的 CS#/CLK，

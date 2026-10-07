@@ -53,9 +53,9 @@ A-07  broker outage   : stop broker 60 s; backfill <= 24 s, no seq hole;
                         LOG_BACKFILL carries the loss count (console 'stats').
 A-08  e2e latency     : telemetry ts vs PC receive time; P99 <= 200 ms.
 A-09  pin assertion   : boot log shows "A-09: pin ownership OK".
-First-boot 5-min check (schematic V1.1 re-audit, docs/07 head note):
-      blue LED heartbeat = PC0 OK; SW2 flips pages = PD15 OK.  If dead:
-      fallback hypothesis PE0/PA2 (two macros, old docs/07 V-4).
+First-boot 5-min check (silkscreen authority, 迁移说明 §17):
+      blue LED (PE0) heartbeat OK; K0 (PA2) flips pages OK; jumper caps
+      match the form: M1 = 485 caps (USART3), M2 = WIFI caps (LPUART1).
 A-10  stack watermarks: task_ovr == 0 over 24 h ('stats').
 A-11  dual-path cfg   : RS485 FC06 vs MQTT cmd write of 0x09; 24C02 equal.
 A-12  UI vs protocol  : browse TFT pages while polling; mb_timeout/mb_retry

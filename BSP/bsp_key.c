@@ -3,8 +3,10 @@
   * @file    bsp_key.c
   * @brief   Polling button driver with debounce & short/long press.
   *
-  *  Keys are active-low (board connects to GND). Debounce: the raw level
-  *  must be stable for DEBOUNCE_MS. Long press: KEY_LONG_MS.
+  *  Per-key polarity from the back silkscreen (docs/迁移说明 §17):
+  *    WKUP (PA0) "闲低按高": idle LOW, press HIGH -> internal PULL-DOWN
+  *    K0 (PA2) / K1 (PA3) "#": active low           -> internal PULL-UP
+  *  Debounce: raw level stable for KEY_DEBOUNCE_MS; long press KEY_LONG_MS.
   ******************************************************************************
   */
 #include "bsp_key.h"
@@ -16,6 +18,7 @@
 typedef struct {
     GPIO_TypeDef *port;
     uint16_t      pin;
+    uint8_t       active_high;     /* 1 = pressed reads HIGH (WKUP) */
     uint8_t       stable_level;    /* debounced level (0=press) */
     uint8_t       debounce_cnt;
     uint8_t       pressed;         /* debounced pressed state   */
@@ -31,27 +34,35 @@ void KEY_Init(void)
 
     KEY_GPIO_CLK_ENABLE();
 
-    /* per-port masks!  The keys now live on TWO ports (K0 = PD15 on-board,
-     * K1/WKUP = PA3/PA0 optional externals).  A combined mask applied to
-     * GPIOA would silently reconfigure PA15 (I2C1_SCL!) as an input - the
-     * exact class of cross-port defect acceptance A-09 exists for. */
     gpio.Mode = GPIO_MODE_INPUT;
-    gpio.Pull = GPIO_PULLUP;    /* board key pulls to GND when pressed */
 
-    gpio.Pin = (uint32_t)KEY_WKUP_PIN | (uint32_t)KEY_K1_PIN;   /* PA0 | PA3 */
+    /* WKUP (PA0): silk "闲低按高" - press drives HIGH, internal pull-down. */
+    gpio.Pin  = KEY_WKUP_PIN;
+    gpio.Pull = GPIO_PULLDOWN;
     HAL_GPIO_Init(KEY_WKUP_PORT, &gpio);
 
-    gpio.Pin = KEY_K0_PIN;                                      /* PD15      */
+    /* K0/K1 (PA2/PA3): silk "#" - active low, internal pull-up. */
+    gpio.Pin  = (uint32_t)KEY_K0_PIN | (uint32_t)KEY_K1_PIN;
+    gpio.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(KEY_K0_PORT, &gpio);
 
     s_keys[KEY_WKUP].port = KEY_WKUP_PORT; s_keys[KEY_WKUP].pin = KEY_WKUP_PIN;
     s_keys[KEY_K0].port   = KEY_K0_PORT;   s_keys[KEY_K0].pin   = KEY_K0_PIN;
     s_keys[KEY_K1].port   = KEY_K1_PORT;   s_keys[KEY_K1].pin   = KEY_K1_PIN;
+    s_keys[KEY_WKUP].active_high = 1U;     /* silk: 闲低按高 */
+    s_keys[KEY_K0].active_high   = 0U;
+    s_keys[KEY_K1].active_high   = 0U;
 }
 
 static uint8_t KEY_RawLevel(key_state_t *k)
 {
-    return (HAL_GPIO_ReadPin(k->port, k->pin) == GPIO_PIN_RESET) ? 1U : 0U;
+    GPIO_PinState lvl = HAL_GPIO_ReadPin(k->port, k->pin);
+
+    if (k->active_high != 0U)
+    {
+        return (lvl == GPIO_PIN_SET) ? 1U : 0U;
+    }
+    return (lvl == GPIO_PIN_RESET) ? 1U : 0U;
 }
 
 key_event_t KEY_Scan(key_id_t *key)
