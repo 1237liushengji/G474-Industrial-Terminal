@@ -77,16 +77,36 @@ static const uint16_t s_crc16_table[256] = {
     0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
 
-uint16_t MODBUS_CRC16_Table(const uint8_t *data, uint16_t len)
+uint16_t MODBUS_CRC16_Init(void)
 {
-    uint16_t crc = 0xFFFFU;
+    return 0xFFFFU;
+}
+
+uint16_t MODBUS_CRC16_Update(uint16_t crc, const uint8_t *data, uint16_t len)
+{
     uint16_t i;
 
+    if (data == 0)
+    {
+        return crc;
+    }
     for (i = 0; i < len; i++)
     {
         crc = (uint16_t)((crc >> 8U) ^ s_crc16_table[(uint8_t)(crc ^ data[i])]);
     }
     return crc;
+}
+
+uint16_t MODBUS_CRC16_UpdateByte(uint16_t crc, uint8_t byte)
+{
+    return (uint16_t)((crc >> 8U) ^ s_crc16_table[(uint8_t)(crc ^ byte)]);
+}
+
+/* Pulled up over the streaming core: byte-for-byte identical to the previous
+ * single-shot loop (same table, same order). */
+uint16_t MODBUS_CRC16_Table(const uint8_t *data, uint16_t len)
+{
+    return MODBUS_CRC16_Update(MODBUS_CRC16_Init(), data, len);
 }
 
 /*====================================================================*/

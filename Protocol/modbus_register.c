@@ -75,9 +75,11 @@ void MB_REG_SetHolding(uint16_t addr, uint16_t value)
     if (addr < MB_REG_HOLD_COUNT)
     {
         s_holding[addr] = value;
-        if (addr >= MB_REG_HOLD_CFG_FIRST)
+        if ((addr >= MB_REG_HOLD_CFG_FIRST) && (addr <= MB_REG_HOLD_CFG_LAST))
         {
-            s_cfg_dirty = 1U;   /* 40010..40015 changed -> persist later */
+            s_cfg_dirty = 1U;   /* 40010..40015 changed -> persist later.
+                                 * The 0x30-0x3F command shadow is NOT
+                                 * persisted in v1 (docs/03 §3.1). */
         }
     }
 }
@@ -94,12 +96,47 @@ void MB_REG_ClearConfigDirty(void)
 
 uint8_t MB_REG_HoldingWritable(uint16_t addr)
 {
-    /* writable: config region 40010..40015 only */
-    return (addr >= MB_REG_HOLD_CFG_FIRST) && (addr <= MB_REG_HOLD_MAX_ADDR);
+    /* writable: config region 0x09-0x0E and command shadow 0x30-0x3F.
+     * 0x0F (hole), 0x00-0x08 and 0x10-0x2F stay read-only. */
+    if ((addr >= MB_REG_HOLD_CFG_FIRST) && (addr <= MB_REG_HOLD_CFG_LAST))
+    {
+        return 1U;
+    }
+    if ((addr >= MB_REG_HOLD_CMD_FIRST) && (addr <= MB_REG_HOLD_CMD_LAST))
+    {
+        return 1U;
+    }
+    return 0U;
+}
+
+uint8_t MB_REG_HoldRangeValid(uint16_t start, uint16_t qty)
+{
+    if (qty == 0U)
+    {
+        return 0U;
+    }
+    if (((uint32_t)start + (uint32_t)qty) > MB_REG_HOLD_COUNT)
+    {
+        return 0U;
+    }
+    /* sentinel hole: reject single access AND any block crossing 0x0F */
+    if ((start <= MB_REG_HOLD_HOLE) &&
+        (((uint32_t)start + (uint32_t)qty) > MB_REG_HOLD_HOLE))
+    {
+        return 0U;
+    }
+    return 1U;
 }
 
 uint8_t MB_REG_ValidateConfigValue(uint16_t addr, uint16_t value)
 {
+    /* command shadow 0x30-0x3F: any u16 accepted; range semantics belong to
+     * the cmd executor (v0.4), the register itself is a dumb mailbox. */
+    if ((addr >= MB_REG_HOLD_CMD_FIRST) && (addr <= MB_REG_HOLD_CMD_LAST))
+    {
+        return 1U;
+    }
+
     switch (addr)
     {
         case MB_REG_HOLD_TEMP_LIMIT:
@@ -122,7 +159,7 @@ uint8_t MB_REG_ValidateConfigValue(uint16_t addr, uint16_t value)
             return (value <= 4U) ? 1U : 0U;
 
         default:
-            /* config region only; non-config handled by caller */
+            /* not a writable config register; caller checks writability */
             return 0U;
     }
 }
@@ -137,6 +174,14 @@ uint16_t MB_REG_GetInput(uint16_t addr)
         return s_input[addr];
     }
     return 0U;
+}
+
+void MB_REG_SetInput(uint16_t addr, uint16_t value)
+{
+    if (addr < MB_REG_IN_COUNT)
+    {
+        s_input[addr] = value;
+    }
 }
 
 /*====================================================================*/

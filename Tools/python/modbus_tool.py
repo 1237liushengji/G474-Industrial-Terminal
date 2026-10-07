@@ -57,24 +57,38 @@ def parse_register(text: str) -> int:
 
 
 def format_holding_value(addr: int, v: int) -> str:
-    """Pretty print according to docs/03 register map."""
+    """Pretty print according to docs/03 register map (v1 contract, 64 regs)."""
     names = {
         0x00: "Temperature", 0x01: "Humidity", 0x02: "Voltage",
         0x03: "Current", 0x04: "DeviceStatus", 0x05: "ErrorCode",
         0x06: "RXCount", 0x07: "TXCount", 0x08: "CRCError",
         0x09: "TempLimit", 0x0A: "VoltageLimit", 0x0B: "SamplePeriod",
         0x0C: "DeviceMode", 0x0D: "SlaveID", 0x0E: "Baudrate",
+        0x0F: "(hole)",
+        0x10: "CanTxAck", 0x11: "CanRxOvr", 0x12: "CanBusOff",
+        0x13: "CanTxLatMax", 0x14: "MbTimeout", 0x15: "MbRetry",
+        0x16: "MbException", 0x17: "LinkMask",
+        0x18: "ContractHash", 0x19: "ContractVer", 0x1A: "FormMode",
+        0x1B: "FwVer", 0x1C: "HbSeq", 0x1D: "UptimeS",
+        0x1E: "FreeHeap", 0x1F: "TaskOvr",
+        0x20: "Adc1Raw", 0x21: "McuTemp", 0x22: "VrefMv",
+        0x30: "CmdWriteReg", 0x31: "CmdWriteVal", 0x32: "CmdId",
+        0x33: "CmdResult", 0x34: "CmdExccode",
     }
     name = names.get(addr, f"reg{addr:04X}")
-    if addr in (0x00, 0x09):
+    if addr in (0x00, 0x09, 0x21):
         return f"{name}: {v / 10.0:.1f} (raw {v})"
     if addr in (0x02, 0x0A):
         return f"{name}: {v / 100.0:.2f} (raw {v})"
     if addr == 0x0B:
         return f"{name}: {v} ms"
     if addr == 0x0E:
-        bauds = {0: 9600, 1: 19200, 2: 38400, 3: 57600, 4: 115200, 5: 230400}
+        bauds = {0: 9600, 1: 19200, 2: 38400, 3: 57600, 4: 115200}
         return f"{name}: idx {v} = {bauds.get(v, '?')}"
+    if addr == 0x18:
+        return f"{name}: {v:04X} (contract hash)"
+    if addr == 0x1B:
+        return f"{name}: BCD {v:04X}"
     return f"{name}: {v}"
 
 

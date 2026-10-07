@@ -103,10 +103,50 @@ def test_master_rw():
     print(f"    stats: {m.stats}")
 
 
+def test_v03_register_map():
+    """v0.3: 64-register map, 0x0F sentinel hole, FC04, command shadow."""
+    from modbus_crc import append_crc
+    sim = SlaveSimulator(slave_id=1)
+
+    def req(*b):
+        return sim.handle_request(append_crc(bytes(b)))
+
+    # FC04 read 4 input regs -> normal response, byte count 8
+    r = req(1, 0x04, 0x00, 0x00, 0x00, 0x04)
+    assert r is not None and r[1] == 0x04 and r[2] == 8, r
+
+    # FC04 out of range -> illegal address
+    r = req(1, 0x04, 0x00, 0x03, 0x00, 0x02)
+    assert r is not None and r[1] == 0x84 and r[2] == 0x02, r
+
+    # 0x0F hole: single access and BOTH crossing directions -> 0x02
+    assert req(1, 0x03, 0x00, 0x0F, 0x00, 0x01)[2] == 0x02
+    assert req(1, 0x03, 0x00, 0x0E, 0x00, 0x02)[2] == 0x02
+    assert req(1, 0x03, 0x00, 0x0E, 0x00, 0x05)[2] == 0x02   # golden E3 shape
+
+    # new regions are readable: 0x10..0x17 (8 regs) and full 0x10..0x3F
+    r = req(1, 0x03, 0x00, 0x10, 0x00, 0x08)
+    assert r is not None and r[1] == 0x03 and r[2] == 16, r
+    r = req(1, 0x03, 0x00, 0x10, 0x00, 0x30)
+    assert r is not None and r[1] == 0x03 and r[2] == 96, r
+
+    # 0x30-0x3F writable; 0x10-0x2F read-only
+    r = req(1, 0x06, 0x00, 0x30, 0x00, 0x2A)
+    assert r is not None and r[1] == 0x06 and sim.holding[0x30] == 0x2A, r
+    r = req(1, 0x06, 0x00, 0x10, 0x00, 0x01)
+    assert r is not None and r[1] == 0x86 and r[2] == 0x02, r
+    r = req(1, 0x10, 0x00, 0x35, 0x00, 0x02, 0x04, 0x00, 0x01, 0x00, 0x02)
+    assert r is not None and r[1] == 0x10, r
+    assert sim.holding[0x35] == 1 and sim.holding[0x36] == 2
+
+    print("OK  v0.3 register map (64 regs / 0x0F hole / FC04 / cmd shadow)")
+
+
 def main():
     test_crc_vectors()
     test_golden_frames()
     test_master_rw()
+    test_v03_register_map()
     print("ALL OFFLINE TESTS PASSED")
 
 

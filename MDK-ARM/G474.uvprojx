@@ -633,6 +633,16 @@
                 <FileType>1</FileType>
                 <FilePath>..\Common\console.c</FilePath>
               </File>
+              <File>
+                <FileName>dp_table.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\dp_table.c</FilePath>
+              </File>
+              <File>
+                <FileName>fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\fmt.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1349,6 +1359,16 @@
                 <FileName>console.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\console.c</FilePath>
+              </File>
+              <File>
+                <FileName>dp_table.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\dp_table.c</FilePath>
+              </File>
+              <File>
+                <FileName>fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\fmt.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2067,6 +2087,16 @@
                 <FileType>1</FileType>
                 <FilePath>..\Common\console.c</FilePath>
               </File>
+              <File>
+                <FileName>dp_table.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\dp_table.c</FilePath>
+              </File>
+              <File>
+                <FileName>fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\fmt.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2783,6 +2813,16 @@
                 <FileName>console.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\console.c</FilePath>
+              </File>
+              <File>
+                <FileName>dp_table.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\dp_table.c</FilePath>
+              </File>
+              <File>
+                <FileName>fmt.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\fmt.c</FilePath>
               </File>
           </Files>
         </Group>

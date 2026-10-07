@@ -12,8 +12,19 @@
 #include <stdint.h>
 
 /*====================================================================*/
-/* Holding register address map (15 regs, addr 0x00..0x0E)             */
+/* Holding register address map - 64 regs, PDU 0x00..0x3F (docs/03 §3)  */
+/*   0x00-0x08 live measurements / status / counters      RO [v1 frozen] */
+/*   0x09-0x0E field-editable config (24C02 persisted)    RW [v1 frozen] */
+/*   0x0F      sentinel hole - ALWAYS exception 0x02, read and write,   */
+/*             incl. any block access whose range crosses it            */
+/*   0x10-0x17 gateway / CAN backbone counters            RO   (v0.3)   */
+/*   0x18-0x1F contract metadata                          RO   (v0.3)   */
+/*   0x20-0x2F extended measurements                      RO   (v0.3)   */
+/*   0x30-0x3F downlink command shadow (not persisted)    RW   (v0.3)   */
+/*   0x38-0x3F reserved control: exist but appear in NO projection      */
 /*====================================================================*/
+
+/*---- 0x00-0x0E: the v1-frozen block (semantics unchanged since v2.0) --*/
 #define MB_REG_HOLD_TEMP          0x00   /* 40001 0.1C   RO */
 #define MB_REG_HOLD_HUMI          0x01   /* 40002 0.1%RH RO */
 #define MB_REG_HOLD_VOLT          0x02   /* 40003 0.01V  RO */
@@ -30,9 +41,53 @@
 #define MB_REG_HOLD_SLAVE_ID      0x0D   /* 40014 addr   RW config */
 #define MB_REG_HOLD_BAUD_IDX      0x0E   /* 40015 baud table idx RW config */
 
-#define MB_REG_HOLD_COUNT         15U
+#define MB_REG_HOLD_HOLE          0x0F   /* 40016 sentinel: always 0x02 */
+
+/*---- 0x10-0x17: gateway / CAN backbone counters (RO) -----------------*/
+#define MB_REG_HOLD_CAN_TX_ACK    0x10   /* 40017 CAN frames acked      */
+#define MB_REG_HOLD_CAN_RX_OVR    0x11   /* 40018 CAN rx overruns       */
+#define MB_REG_HOLD_CAN_BUSOFF    0x12   /* 40019 CAN bus-off count     */
+#define MB_REG_HOLD_CAN_TX_LAT    0x13   /* 40020 CAN tx max latency ms */
+#define MB_REG_HOLD_MB_TIMEOUT    0x14   /* 40021 Modbus timeouts       */
+#define MB_REG_HOLD_MB_RETRY      0x15   /* 40022 Modbus retries        */
+#define MB_REG_HOLD_MB_EXCEPTION  0x16   /* 40023 Modbus exceptions     */
+#define MB_REG_HOLD_LINK_MASK     0x17   /* 40024 bit0=485 1=CAN 2=WiFi 3=MQTT */
+
+/*---- 0x18-0x1F: contract metadata (RO) -------------------------------*/
+#define MB_REG_HOLD_CONTRACT_HASH 0x18   /* 40025 CRC16 of dp_table     */
+#define MB_REG_HOLD_CONTRACT_VER  0x19   /* 40026 contract version      */
+#define MB_REG_HOLD_FORM_MODE     0x1A   /* 40027 1=M1 2=M2             */
+#define MB_REG_HOLD_FW_VER        0x1B   /* 40028 BCD, 1.0.0 -> 0x100   */
+#define MB_REG_HOLD_HB_SEQ        0x1C   /* 40029 heartbeat/publish seq */
+#define MB_REG_HOLD_UPTIME_S      0x1D   /* 40030 uptime seconds (low)  */
+#define MB_REG_HOLD_FREE_HEAP     0x1E   /* 40031 FreeRTOS free heap    */
+#define MB_REG_HOLD_TASK_OVR      0x1F   /* 40032 task starvation count */
+
+/*---- 0x20-0x2F: extended measurements (RO) ---------------------------*/
+#define MB_REG_HOLD_ADC1_RAW      0x20   /* 40033 ADC1 channel raw      */
+#define MB_REG_HOLD_MCU_TEMP      0x21   /* 40034 MCU temp 0.1C         */
+#define MB_REG_HOLD_VREF_MV       0x22   /* 40035 VREFINT mV            */
+#define MB_REG_HOLD_RSV_MEAS_FIRST 0x23  /* 40036 .. 13 reserved slots  */
+#define MB_REG_HOLD_RSV_MEAS_COUNT 13U
+
+/*---- 0x30-0x3F: downlink command shadow (RW, not persisted) ----------*/
+#define MB_REG_HOLD_CMD_WRITE_REG 0x30   /* 40049 target register addr  */
+#define MB_REG_HOLD_CMD_WRITE_VAL 0x31   /* 40050 value to write        */
+#define MB_REG_HOLD_CMD_ID        0x32   /* 40051 transaction id        */
+#define MB_REG_HOLD_CMD_RESULT    0x33   /* 40052 0=none 1=ok 2=exc     */
+#define MB_REG_HOLD_CMD_EXCCODE   0x34   /* 40053 exception code        */
+#define MB_REG_HOLD_RSV_CTRL_FIRST 0x35  /* 40054 .. 11 reserved slots  */
+#define MB_REG_HOLD_RSV_CTRL_COUNT 11U   /* 0x35..0x3F                  */
+
+#define MB_REG_HOLD_CMD_FIRST     0x30
+#define MB_REG_HOLD_CMD_LAST      0x3F
+
+/*---- boundaries ------------------------------------------------------*/
+#define MB_REG_HOLD_COUNT         64U
 #define MB_REG_HOLD_MAX_ADDR      (MB_REG_HOLD_COUNT - 1U)
 #define MB_REG_HOLD_CFG_FIRST     MB_REG_HOLD_TEMP_LIMIT   /* writable start */
+#define MB_REG_HOLD_CFG_LAST      MB_REG_HOLD_BAUD_IDX
+#define MB_REG_HOLD_CFG_COUNT     6U
 
 /*====================================================================*/
 /* Input register map (0x04 read)                                       */
@@ -78,8 +133,19 @@ uint16_t MB_REG_GetHolding(uint16_t addr);
 void     MB_REG_SetHolding(uint16_t addr, uint16_t value);
 uint8_t  MB_REG_HoldingWritable(uint16_t addr);
 
+/**
+  * @brief  Range check for a block holding-register access (FC03).
+  * @param  start  first PDU address, qty number of registers
+  * @retval 1 valid, 0 -> caller answers exception 0x02
+  * @note   Rejects: out of 0x00..0x3F AND any range that INTERSECTS the
+  *         0x0F sentinel hole (keeps the v2.0 behaviour that a block read
+  *         crossing 0x0F is an illegal address - golden vector E3).
+  */
+uint8_t  MB_REG_HoldRangeValid(uint16_t start, uint16_t qty);
+
 /** Input registers */
 uint16_t MB_REG_GetInput(uint16_t addr);
+void     MB_REG_SetInput(uint16_t addr, uint16_t value);
 
 /** Coils (bit access) */
 uint8_t  MB_REG_GetCoil(uint16_t addr);
@@ -98,15 +164,17 @@ uint8_t MB_REG_ConfigDirty(void);
 void    MB_REG_ClearConfigDirty(void);
 
 /**
-  * @brief  Semantic range check for a config register write.
-  * @param  addr   config register address (40010..40015)
+  * @brief  Semantic range check for a register write (FC06/FC10).
+  * @param  addr   register address inside a writable region
   * @param  value  proposed value
   * @retval 1 valid / 0 rejected
-  * @note   Limits: SlaveID 1..247, BaudIdx 0..4 (9600..115200),
-  *         TempLimit/VoltLimit nonzero, SamplePeriod 10..60000,
-  *         DeviceMode 0..3. Writes outside these ranges would brick the
-  *         node (unreachable slave id / invalid baud), so the protocol
-  *         layer checks this before accepting 0x06/0x10.
+  * @note   Config region 0x09-0x0E: SlaveID 1..247, BaudIdx 0..4
+  *         (9600..115200), TempLimit/VoltLimit nonzero,
+  *         SamplePeriod 10..60000, DeviceMode 0..3.  Writes outside these
+  *         ranges would brick the node (unreachable slave id / invalid
+  *         baud), so the protocol layer checks this before accepting.
+  *         Command shadow region 0x30-0x3F: any u16 value is valid -
+  *         range semantics belong to the cmd executor, not the register.
   */
 uint8_t MB_REG_ValidateConfigValue(uint16_t addr, uint16_t value);
 

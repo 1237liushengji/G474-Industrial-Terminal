@@ -22,6 +22,7 @@
 #include "bsp_printf.h"
 #include "can_drv.h"
 #include "console.h"
+#include "dp_table.h"
 #include "isotp.h"
 #include "uds.h"
 #include "log_service.h"
@@ -352,6 +353,15 @@ void App_RtosInit(void)
      * task reads it (UI, console stats).  Hardware init stays in the owning
      * task (mb task: 24C02/RS485; log task: W25Q; ui task: LCD/keys). */
     MB_REG_Init();
+
+    /* Contract metadata (docs/03 §3.2, 0x18-0x1B): the hash is computed from
+     * Common/dp_table.c - the compile-time table that IS the contract.  The
+     * same hash is emitted in MQTT meta."ch" and the ISO-TP snapshot header;
+     * acceptance A-05 compares all three against Tools/python/dp_table.json. */
+    MB_REG_SetHolding(MB_REG_HOLD_CONTRACT_HASH, DP_Table_ContractHash());
+    MB_REG_SetHolding(MB_REG_HOLD_CONTRACT_VER,  CONTRACT_VERSION);
+    MB_REG_SetHolding(MB_REG_HOLD_FORM_MODE,     FORM_MODE);
+    MB_REG_SetHolding(MB_REG_HOLD_FW_VER,        FW_VERSION_BCD);
 
     LOG_SVC_Init();
     BSP_Printf_Init();

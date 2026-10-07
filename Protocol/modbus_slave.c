@@ -312,7 +312,10 @@ static void Slave_FC03(const uint8_t *req)
         Slave_SendException(MB_FC_READ_HOLDING_REGS, MB_EX_ILLEGAL_VALUE);
         return;
     }
-    if ((uint32_t)start + qty > MB_REG_HOLD_COUNT)
+    /* range check incl. the 0x0F sentinel hole (docs/03 §3.1): reading across
+     * the hole is an illegal address - preserves the v2.0 behaviour that the
+     * golden vector E3 (0x0E + 5) keeps answering 0x02. */
+    if (MB_REG_HoldRangeValid(start, qty) == 0U)
     {
         Slave_SendException(MB_FC_READ_HOLDING_REGS, MB_EX_ILLEGAL_ADDRESS);
         return;
@@ -326,6 +329,36 @@ static void Slave_FC03(const uint8_t *req)
         resp[1 + 2U * i + 1] = (uint8_t)(v & 0xFF);
     }
     Slave_SendOk(MB_FC_READ_HOLDING_REGS, resp, (uint16_t)(1U + qty * 2U));
+}
+
+/* 0x04 Read Input Registers (v0.3: implemented - was exception 0x01 in v2.0).
+ * Same shape as FC03 but against the input bank (4 regs, all read-only). */
+static void Slave_FC04(const uint8_t *req)
+{
+    uint16_t start = (uint16_t)((req[0] << 8) | req[1]);
+    uint16_t qty   = (uint16_t)((req[2] << 8) | req[3]);
+    uint8_t  *resp = s_resp_payload;
+    uint16_t i;
+
+    if (qty == 0U || qty > MB_FC_MAX_QTY_HOLDING)
+    {
+        Slave_SendException(MB_FC_READ_INPUT_REGS, MB_EX_ILLEGAL_VALUE);
+        return;
+    }
+    if (((uint32_t)start + (uint32_t)qty) > MB_REG_IN_COUNT)
+    {
+        Slave_SendException(MB_FC_READ_INPUT_REGS, MB_EX_ILLEGAL_ADDRESS);
+        return;
+    }
+
+    resp[0] = (uint8_t)(qty * 2U);
+    for (i = 0; i < qty; i++)
+    {
+        uint16_t v = MB_REG_GetInput((uint16_t)(start + i));
+        resp[1 + 2U * i]     = (uint8_t)(v >> 8);
+        resp[1 + 2U * i + 1] = (uint8_t)(v & 0xFF);
+    }
+    Slave_SendOk(MB_FC_READ_INPUT_REGS, resp, (uint16_t)(1U + qty * 2U));
 }
 
 /*====================================================================*/
@@ -383,6 +416,17 @@ static void Slave_ProcessFrame(void)
             if (pdu_len == 4U)
             {
                 Slave_FC03(&s_rx_buf[2]);
+            }
+            else
+            {
+                Slave_SendException(func, MB_EX_ILLEGAL_VALUE);
+            }
+            break;
+
+        case MB_FC_READ_INPUT_REGS:                 /* v0.3: implemented */
+            if (pdu_len == 4U)
+            {
+                Slave_FC04(&s_rx_buf[2]);
             }
             else
             {
