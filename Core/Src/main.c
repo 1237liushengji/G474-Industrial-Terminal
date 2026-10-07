@@ -23,16 +23,14 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_board_cfg.h"
+#include "app_rtos.h"
 #include "bsp_led.h"
 #include "bsp_iwdg.h"
 #include "bsp_tick.h"
 #include "can_drv.h"
-#include "isotp.h"
-#if ROLE_IS_GW
-#include "mb_master_port.h"
-#else
-#include "node_app.h"
-#endif
+
+#include "FreeRTOS.h"
+#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -71,9 +69,17 @@ void SystemClock_Config(void);
   * @brief  The application entry point.
   * @retval int
   *
+  * Boot sequence (v0.2 - FreeRTOS):
+  *   1. HAL_Init()        -> time base is TIM6 (stm32g4xx_hal_timebase_tim.c)
+  *   2. clock + GPIO + DWT microsecond tick
+  *   3. App_RtosInit()    -> queues + task set (T1/T2/T5/T6/T7 + console)
+  *   4. CAN_Init()        -> the RX queue must exist before IRQs are unmasked
+  *   5. IWDG last         -> wdt_task takes over feeding right after the
+  *                           scheduler starts (never returns afterwards)
+  *
   * Both roles are built from this one file.  The role, the form factor and
   * every pin come from App/app_board_cfg.h via the Keil target's Define field:
-  *   A_GW_M1 / A_GW_M2   : NODE_ROLE=0   (Modbus master + uplink)
+  *   A_GW_M1 / A_GW_M2    : NODE_ROLE=0  (Modbus master + uplink)
   *   B_NODE_M1 / B_NODE_M2: NODE_ROLE=1  (Modbus slave + local HMI)
   */
 int main(void)
@@ -84,7 +90,8 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the TIM6
+   * HAL time base (SysTick belongs to the kernel once the scheduler runs). */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
@@ -102,7 +109,11 @@ int main(void)
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
   LED_Init();
-  BSP_Tick_Init();
+  BSP_Tick_Init();      /* DWT microsecond source (Modbus t3.5, CAN latency) */
+
+  /* RTOS objects first: the CAN RX queue must exist before CAN interrupts
+   * can fire, and the log/config queues are used by every task. */
+  App_RtosInit();
 
   /* CAN backbone: FDCAN1 on PD0/PD1.  Its low-level init lives in
    * Core/Src/stm32g4xx_hal_msp.c (HAL_FDCAN_MspInit) because HAL_FDCAN_Init
@@ -114,25 +125,28 @@ int main(void)
   }
 
   /* Watchdog last, so that init time does not eat into the timeout budget.
-   * From here on the role main loop owns BSP_IWDG_Refresh(). */
+   * From here on wdt_task owns BSP_IWDG_Refresh(). */
   if (BSP_IWDG_Init() != 0)
   {
     Error_Handler();
   }
 
-#if ROLE_IS_GW
-  Master_Main();     /* Gateway: Modbus master; M2 adds the MQTT uplink. Never returns. */
-#else
-  Slave_Main();      /* Node: Modbus slave + local HMI + parameter storage. Never returns. */
-#endif
+  /* Hand over to the kernel - role bodies run inside their tasks:
+   *   mb_task  -> Master_TaskMain() / Node_TaskMain()
+   *   ui_task  -> Node_UiInit/Step()  (monitoring page on the gateway in v0.7)
+   *   log_task -> flash log + CONFIG_Save
+   *   can_task -> RX queue drain + ISO-TP/UDS; wdt_task feeds the IWDG      */
+  vTaskStartScheduler();
   /* USER CODE END 2 */
 
-  /* Infinite loop - unreachable when the role main runs */
+  /* If the scheduler cannot start (heap exhausted), fail loudly. */
+  Error_Handler();
+
+  /* Infinite loop - unreachable */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
-    HAL_Delay(1000);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

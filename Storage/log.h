@@ -22,8 +22,11 @@
 #include <stdint.h>
 #include "types.h"   /* log_event_t */
 
-/* Configuration: 64 KB log area = 16 sectors, record 32 B -> 2048 recs */
-#define LOG_AREA_SIZE      (64UL * 1024UL)
+/* Configuration: 256 KB log area = 64 sectors, record 32 B -> 8192 recs.
+ * v0.2: grown from 64 KB now that the on-board W25Q128 is actually driven on
+ * the correct SPI2 bus (docs/07 §3/§6).  The power-up area scan is no longer
+ * a boot blocker - it runs inside log_task (Storage/log_service.c). */
+#define LOG_AREA_SIZE      (256UL * 1024UL)
 #define LOG_RECORD_SIZE    32U
 #define LOG_SECTOR_SIZE    4096U
 

@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -412,6 +412,11 @@
                 <FileName>stm32g4xx_hal_msp.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+              </File>
+              <File>
+                <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../Core/Src/stm32g4xx_hal_timebase_tim.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -583,6 +588,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\BSP\can_drv.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_console.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -598,6 +608,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Storage\log.c</FilePath>
               </File>
+              <File>
+                <FileName>log_service.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Storage\log_service.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -607,6 +622,16 @@
                 <FileName>ring_buffer.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\ring_buffer.c</FilePath>
+              </File>
+              <File>
+                <FileName>bsp_printf.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\bsp_printf.c</FilePath>
+              </File>
+              <File>
+                <FileName>console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\console.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -638,6 +663,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Protocol\isotp.c</FilePath>
               </File>
+              <File>
+                <FileName>uds.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Protocol\uds.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -652,6 +682,41 @@
                 <FileName>node_app.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\node_app.c</FilePath>
+              </File>
+              <File>
+                <FileName>app_rtos.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares/FreeRTOS-Kernel</GroupName>
+          <Files>
+              <File>
+                <FileName>tasks.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\tasks.c</FilePath>
+              </File>
+              <File>
+                <FileName>list.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\list.c</FilePath>
+              </File>
+              <File>
+                <FileName>queue.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\queue.c</FilePath>
+              </File>
+              <File>
+                <FileName>port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F\port.c</FilePath>
+              </File>
+              <File>
+                <FileName>heap_4.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\MemMang\heap_4.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -991,7 +1056,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=0,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1064,6 +1129,11 @@
                 <FileName>stm32g4xx_hal_msp.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+              </File>
+              <File>
+                <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../Core/Src/stm32g4xx_hal_timebase_tim.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1235,6 +1305,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\BSP\can_drv.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_console.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1250,6 +1325,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Storage\log.c</FilePath>
               </File>
+              <File>
+                <FileName>log_service.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Storage\log_service.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1259,6 +1339,16 @@
                 <FileName>ring_buffer.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\ring_buffer.c</FilePath>
+              </File>
+              <File>
+                <FileName>bsp_printf.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\bsp_printf.c</FilePath>
+              </File>
+              <File>
+                <FileName>console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\console.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1290,6 +1380,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Protocol\isotp.c</FilePath>
               </File>
+              <File>
+                <FileName>uds.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Protocol\uds.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1304,6 +1399,41 @@
                 <FileName>node_app.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\node_app.c</FilePath>
+              </File>
+              <File>
+                <FileName>app_rtos.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares/FreeRTOS-Kernel</GroupName>
+          <Files>
+              <File>
+                <FileName>tasks.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\tasks.c</FilePath>
+              </File>
+              <File>
+                <FileName>list.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\list.c</FilePath>
+              </File>
+              <File>
+                <FileName>queue.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\queue.c</FilePath>
+              </File>
+              <File>
+                <FileName>port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F\port.c</FilePath>
+              </File>
+              <File>
+                <FileName>heap_4.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\MemMang\heap_4.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1643,7 +1773,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=1</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1716,6 +1846,11 @@
                 <FileName>stm32g4xx_hal_msp.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+              </File>
+              <File>
+                <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../Core/Src/stm32g4xx_hal_timebase_tim.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1887,6 +2022,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\BSP\can_drv.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_console.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1902,6 +2042,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Storage\log.c</FilePath>
               </File>
+              <File>
+                <FileName>log_service.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Storage\log_service.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1911,6 +2056,16 @@
                 <FileName>ring_buffer.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\ring_buffer.c</FilePath>
+              </File>
+              <File>
+                <FileName>bsp_printf.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\bsp_printf.c</FilePath>
+              </File>
+              <File>
+                <FileName>console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\console.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -1942,6 +2097,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Protocol\isotp.c</FilePath>
               </File>
+              <File>
+                <FileName>uds.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Protocol\uds.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -1956,6 +2116,41 @@
                 <FileName>node_app.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\node_app.c</FilePath>
+              </File>
+              <File>
+                <FileName>app_rtos.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares/FreeRTOS-Kernel</GroupName>
+          <Files>
+              <File>
+                <FileName>tasks.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\tasks.c</FilePath>
+              </File>
+              <File>
+                <FileName>list.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\list.c</FilePath>
+              </File>
+              <File>
+                <FileName>queue.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\queue.c</FilePath>
+              </File>
+              <File>
+                <FileName>port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F\port.c</FilePath>
+              </File>
+              <File>
+                <FileName>heap_4.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\MemMang\heap_4.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2295,7 +2490,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx,NODE_ROLE=1,FORM_MODE=2</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\BSP;..\Common;..\Protocol;..\Storage;..\Middlewares\FreeRTOS-Kernel\include;..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -2368,6 +2563,11 @@
                 <FileName>stm32g4xx_hal_msp.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
+              </File>
+              <File>
+                <FileName>stm32g4xx_hal_timebase_tim.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>../Core/Src/stm32g4xx_hal_timebase_tim.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2539,6 +2739,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\BSP\can_drv.c</FilePath>
               </File>
+              <File>
+                <FileName>bsp_console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\BSP\bsp_console.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2554,6 +2759,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Storage\log.c</FilePath>
               </File>
+              <File>
+                <FileName>log_service.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Storage\log_service.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2563,6 +2773,16 @@
                 <FileName>ring_buffer.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\Common\ring_buffer.c</FilePath>
+              </File>
+              <File>
+                <FileName>bsp_printf.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\bsp_printf.c</FilePath>
+              </File>
+              <File>
+                <FileName>console.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Common\console.c</FilePath>
               </File>
           </Files>
         </Group>
@@ -2594,6 +2814,11 @@
                 <FileType>1</FileType>
                 <FilePath>..\Protocol\isotp.c</FilePath>
               </File>
+              <File>
+                <FileName>uds.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Protocol\uds.c</FilePath>
+              </File>
           </Files>
         </Group>
         <Group>
@@ -2608,6 +2833,41 @@
                 <FileName>node_app.c</FileName>
                 <FileType>1</FileType>
                 <FilePath>..\App\node_app.c</FilePath>
+              </File>
+              <File>
+                <FileName>app_rtos.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\App\app_rtos.c</FilePath>
+              </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Middlewares/FreeRTOS-Kernel</GroupName>
+          <Files>
+              <File>
+                <FileName>tasks.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\tasks.c</FilePath>
+              </File>
+              <File>
+                <FileName>list.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\list.c</FilePath>
+              </File>
+              <File>
+                <FileName>queue.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\queue.c</FilePath>
+              </File>
+              <File>
+                <FileName>port.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\GCC\ARM_CM4F\port.c</FilePath>
+              </File>
+              <File>
+                <FileName>heap_4.c</FileName>
+                <FileType>1</FileType>
+                <FilePath>..\Middlewares\FreeRTOS-Kernel\portable\MemMang\heap_4.c</FilePath>
               </File>
           </Files>
         </Group>

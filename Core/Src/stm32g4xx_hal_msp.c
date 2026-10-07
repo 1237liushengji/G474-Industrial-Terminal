@@ -120,11 +120,14 @@ void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef* fdcanHandle)
     GPIO_InitStruct.Alternate = CAN_AF;
     HAL_GPIO_Init(CAN_RX_GPIO_PORT, &GPIO_InitStruct);
 
-    /* Interrupt line 0.  NOTE: priority (1,0) is inherited from CAN v3.0 where
-     * it was verified on hardware.  v0.2 (FreeRTOS) MUST lower it to >= 5,
-     * i.e. below configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY, before any
-     * *FromISR call is made from this handler - see docs/04 §5. */
-    HAL_NVIC_SetPriority(CAN_IRQn, 1, 0);
+    /* Interrupt line 0.  Priority comes from the NVIC table in docs/04 §5
+     * (IRQ_PRIO_CAN = (6,0)).  v3.0 ran at (1,0), which is below
+     * configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (5) and therefore ILLEGAL
+     * for an ISR that calls *FromISR APIs - the RX callback now posts into a
+     * FreeRTOS queue, so the priority had to change.  Cost of the change is
+     * re-running acceptance A-03 (frame accounting) and A-04 (bus-off) - see
+     * docs/05 v0.2 and docs/02 §5 decision 2. */
+    HAL_NVIC_SetPriority(CAN_IRQn, IRQ_PRIO_CAN, 0);
     HAL_NVIC_EnableIRQ(CAN_IRQn);
   }
 }

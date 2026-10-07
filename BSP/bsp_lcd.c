@@ -17,7 +17,7 @@
 /*====================================================================*/
 /* Controller geometry & config                                        */
 /*====================================================================*/
-/* LCD_CTRL_SELECT defined in bsp_board_cfg.h:
+/* LCD_CTRL_SELECT defined in app_board_cfg.h:
    0 = ST7789 240x280 (1.69 inch, GRAM 240x320, visible y-offset 20)
    1 = ILI9341 (240x320), 2 = ST7735 (128x160)
    Geometry & offsets are tuned for the Genbotter 1.69" 240x280 panel. */
@@ -57,7 +57,7 @@ const uint8_t LCD_CHAR_COLS = (uint8_t)(LCD_WIDTH / LCD_CHAR_CELL_W);  /* 20 */
 const uint8_t LCD_CHAR_ROWS = (uint8_t)(LCD_HEIGHT / LCD_CHAR_CELL_H); /* 17 */
 
 /*====================================================================*/
-/* Soft SPI primitives (pins come from bsp_board_cfg.h)
+/* Soft SPI primitives (pins come from app_board_cfg.h)
  *
  * Performance: HAL_GPIO_WritePin() is slow (~50ns+ per call with arg
  * checking). The screen is a soft-SPI device and whole-screen fills push

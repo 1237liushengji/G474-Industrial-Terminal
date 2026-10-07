@@ -5,6 +5,13 @@
 > **RS485 = USART2 on PD5/PD6**、**ESP-12F = USART3 on PB10/PB11**、**CAN = FDCAN1 on PD0/PD1**；
 > §5 决策 2 的 NVIC 表相应地 `FDCAN2_IT0` → `FDCAN1_IT0`、`USART3_IRQ` → `USART2_IRQ`（并新增 ESP 用的 `USART3_IRQ`）。
 > **任务表（§3）、时序（§4）、其余移植决策（§5）全部保持有效。**
+>
+> **v0.2 实施注记（2026-10-07）**：任务表已落地于 `App/app_rtos.c`（wdt/can/mb/log/ui +
+> 一个过渡 console_task，v0.5 并入 T4）。三处与本文的理想形态存在**记录在案**的差异：
+> ① RS485 RX 暂时保持 ISR 逐字节回调直喂协议引擎（t3.5 依赖真时间戳，见迁移说明 §9.3）；
+> ② SysTick 实际为最低优先级 (15,0)（FreeRTOS 移植约定，docs/04 §5 注记）；
+> ③ 决策 6 的 `LOG_CACHE_CAP 512→128` 已随 v0.2 落地，v0.6 补发必须走 per-seq 直读接口，
+> 不得依赖 `LOG_Read()`。
 
 ## 1. 分层与目录
 

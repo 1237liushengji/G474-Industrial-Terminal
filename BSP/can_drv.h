@@ -97,6 +97,14 @@ extern FDCAN_HandleTypeDef hfdcan;
 HAL_StatusTypeDef CAN_Init(void);
 HAL_StatusTypeDef CAN_Send(uint32_t stdId, const uint8_t *data, uint8_t len);
 bool              CAN_PollRx(CAN_RxMsg *msg);
+
+/**
+  * @brief  阻塞等待一帧（can_task 上下文；队列为空时最多等 timeout_ms 毫秒）。
+  * @retval 1 取到一帧；0 超时
+  * @note   v0.2：中断投递队列后，等待由队列直接唤醒（即"来自 ISR 的通知"）。
+  */
+uint8_t           CAN_WaitRx(CAN_RxMsg *msg, uint32_t timeout_ms);
+
 const CAN_Stats  *CAN_GetStats(void);
 
 /* 运行时重配置（控制台调用）：

@@ -31,8 +31,13 @@
 #define LOG_SECTOR_COUNT    (LOG_DATA_SIZE / LOG_SECTOR_SIZE)     /* 16  */
 #define LOG_MAX_RECORDS     (LOG_DATA_SIZE / LOG_RECORD_SIZE)     /* 2048 */
 
-/* RAM cache depth: most recent records kept for instant reads */
-#define LOG_CACHE_CAP       512U
+/* RAM cache depth: most recent records kept for instant reads.
+ * v0.2: 512 -> 128, reclaiming 12 KB of SRAM (512x32 B = 16 KB before) to
+ * pay for the FreeRTOS heap - see docs/02 decision 6 and docs/04 §6.
+ * NOTE for v0.6 backfill: LOG_Read() can only reach back 128 records from
+ * now on; the offline backfill MUST use the per-seq direct flash read API
+ * (to be added in v0.6), never LOG_Read(). */
+#define LOG_CACHE_CAP       128U
 
 #define REC_EMPTY           0xFFFFFFFFU
 

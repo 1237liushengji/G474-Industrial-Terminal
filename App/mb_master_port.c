@@ -1,8 +1,7 @@
 /**
   ******************************************************************************
-  * @file    master_main.c
-  * @brief   Master node (A board) application entry.
-  * @note    Compiled only when MODBUS_NODE_ROLE == NODE_ROLE_MASTER.
+  * @file    mb_master_port.c
+  * @brief   Gateway role (A board) - Modbus master engine, mb_task body (T2).
   *
   *  v0.7: periodic poll of the slave (0x03 read of 5 measurands).
   *  v0.8: write-through demo every N polls (0x06), fault LED indication
@@ -10,24 +9,31 @@
   *        LED1 (blue): pulse per successful read transaction
   *        LED2 (green): fast blink while link is down (timeouts), solid
   *                       during exception storms (unused yet)
+  *  v0.2 (FreeRTOS): split out of the old super-loop -
+  *        - CAN/IsoTp/IWDG housekeeping moved to can_task / wdt_task
+  *        - W25Q log init moved to log_task; events are posted, not written
+  *        - HAL_Delay replaced by vTaskDelay
   ******************************************************************************
   */
 #include "mb_master_port.h"
 
 #include "bsp_led.h"
-#include "bsp_iwdg.h"
 #include "can_drv.h"
 #include "isotp.h"
 #include "bsp_rs485.h"
 #include "bsp_uart.h"
 #include "bsp_tick.h"
 #include "app_board_cfg.h"
-#include "bsp_w25q128.h"
 #include "modbus_master.h"
 #include "modbus_register.h"
 #include "config.h"
 #include "log.h"
+#include "log_service.h"
 #include "types.h"
+#include "app_rtos.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
 
 #ifndef MASTER_SLAVE_ID_DEFAULT
 #define MASTER_SLAVE_ID_DEFAULT  1U
@@ -52,9 +58,23 @@ static comm_stats_t s_stats_disp;
 
 static void Master_OnFinished(void);   /* fwd decl */
 
+static TaskHandle_t s_mb_task = 0;      /* mb_task, for TX-done wakes */
+
 static void RSCB_MasterRx(uint8_t byte)
 {
     MB_Master_OnRxByte(byte, BSP_Tick_GetUs());
+}
+
+/* TC reached: bus back in RX mode; wake the engine loop (docs/02 §4.3). */
+static void RSCB_MasterTxDone(void)
+{
+    BaseType_t woken = pdFALSE;
+
+    if (s_mb_task != 0)
+    {
+        vTaskNotifyGiveFromISR(s_mb_task, &woken);
+    }
+    portYIELD_FROM_ISR(woken);
 }
 
 #if (RS485_RX_MODE == 1)
@@ -72,8 +92,10 @@ static void RSCB_MasterRxFrame(const uint8_t *frame, uint16_t len,
 
 static void Master_LogEvent(uint8_t event, uint16_t param)
 {
-    LOG_WriteEvent((log_event_t)event,
-                   (uint8_t)(param & 0xFFU), (uint8_t)((param >> 8) & 0xFFU), 0U);
+    /* Events are queued; log_task owns the blocking flash write (T5). */
+    (void)LOG_SVC_PostEvent(event,
+                            (uint8_t)(param & 0xFFU),
+                            (uint8_t)((param >> 8) & 0xFFU), 0U);
 }
 
 static void Master_OnFinished(void)
@@ -90,7 +112,7 @@ static void Master_OnFinished(void)
     }
     else if (r->timed_out != 0U)
     {
-        /* link down: green fast blink via main loop */
+        /* link down: green fast blink via the loop below */
         LED1_OFF;
         LED2_ON;
         s_fault_led_ms = HAL_GetTick();
@@ -108,19 +130,17 @@ static void Master_DoDemoWrite(void)
                           s_demo_value);
 }
 
-void Master_Main(void)
+/*====================================================================*/
+/* mb_task body (T2)                                                   */
+/*====================================================================*/
+void Master_TaskMain(void)
 {
     config_param_t cfg;
     uint32_t baud;
 
-    /* flash log subsystem (W25Q128) */
-    (void)W25Q_Init();
-    LOG_SetTickSource(HAL_GetTick);
-    LOG_Init();
-    LOG_WriteEvent(LOG_BOOT, 0U, 0U, 0U);
-
-    /* load own link config (both boards carry a 24C02) */
-    MB_REG_Init();
+    /* load own link config (both boards carry a 24C02).
+     * MB_REG_Init() already ran in App_RtosInit(); boot logging is done by
+     * log_task (LOG_BOOT with reset cause). */
     (void)CONFIG_Init(&cfg);
     CONFIG_ApplyToRegisters(&cfg);
     MB_REG_ClearConfigDirty();
@@ -130,6 +150,8 @@ void Master_Main(void)
 
     RS485_Init(baud);
     RS485_SetRxCallback(RSCB_MasterRx);
+    RS485_SetTxDoneCallback(RSCB_MasterTxDone);
+    s_mb_task = xTaskGetCurrentTaskHandle();
 #if (RS485_RX_MODE == 1)
     RS485_SetRxFrameCallback(RSCB_MasterRxFrame);
 #endif
@@ -142,16 +164,8 @@ void Master_Main(void)
     LED1_OFF;
     LED2_OFF;
 
-    while (1)
+    for (;;)
     {
-        /* CAN backbone housekeeping + watchdog.
-         * CAN_Task() drives bus-off exponential backoff and drains the
-         * TX-event confirmations; IsoTp_Task() paces the snapshot
-         * transport (STmin / N_Bs / N_Cr).  Both are non-blocking. */
-        CAN_Task();
-        IsoTp_Task();
-        BSP_IWDG_Refresh();
-
         if (!MB_Master_IsBusy())
         {
             if ((HAL_GetTick() - s_poll_last_ms) >= POLL_PERIOD_MS)
@@ -199,6 +213,10 @@ void Master_Main(void)
             }
         }
 
-        HAL_Delay(1);
+        App_Hb_Beat(APP_HB_MB);
+
+        /* Sleep until an RX/TX event wakes us or 1 ms elapses (v0.1 used
+         * HAL_Delay(1); the TC interrupt now shortens the TX turnaround). */
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
     }
 }

@@ -1,14 +1,15 @@
 /**
   ******************************************************************************
-  * @file    master_main.h
-  * @brief   Master node entry (A board).
+  * @file    mb_master_port.h
+  * @brief   Gateway role entry (A board) - runs as mb_task (T2) since v0.2.
   ******************************************************************************
   */
-#ifndef __MASTER_MAIN_H
-#define __MASTER_MAIN_H
+#ifndef __MB_MASTER_PORT_H
+#define __MB_MASTER_PORT_H
 
 #include "main.h"
 
-void Master_Main(void);   /* never returns */
+/** Role body: init Modbus master + poll loop.  Never returns (task body). */
+void Master_TaskMain(void);
 
-#endif /* __MASTER_MAIN_H */
+#endif /* __MB_MASTER_PORT_H */

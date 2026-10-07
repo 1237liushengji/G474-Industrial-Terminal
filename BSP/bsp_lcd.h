@@ -6,7 +6,7 @@
   *  Board wiring (Genbotter G474, matches the vendor LCD example):
   *    LCD_CS  PD11   LCD_SCL PB3   LCD_SDA PB5   LCD_DC PD12   LCD_BL PD13
   *
-  *  Controller selected by LCD_CTRL_SELECT in bsp_board_cfg.h:
+  *  Controller selected by LCD_CTRL_SELECT in app_board_cfg.h:
   *    0 = ST7789 240x280 (default; GRAM 240x320, visible offset +20 Y)
   *    1 = ILI9341 (240x320)
   *    2 = ST7735  (128x160)

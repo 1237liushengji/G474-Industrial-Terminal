@@ -1,29 +1,40 @@
 /**
   ******************************************************************************
   * @file    console.h
-  * @brief   串口命令行控制台（运行期调测入口：统计/发帧/波特率切换/总线监视）
+  * @brief   Serial command console (debug entry point: stats / send / bitrate
+  *          switch / bus monitor / UDS diagnostics).
   *
-  * 报文输出格式（总线监视模式，供PC上位机解析）：
-  *   RX <毫秒时间戳> <ID十六进制3位> <DLC> <数据十六进制2位xN>
-  *   例：RX 12345 321 8 01 A2 03 ...
+  *  Runs as a low-priority FreeRTOS task since v0.2; polls the USART1 RX ring
+  *  through BSP_Console_GetChar().
+  *
+  *  Frame output format (bus monitor mode, parsed by Tools/python/can_console.py):
+  *    RX <ms timestamp> <ID hex 3 digits> <DLC> <data hex 2 digits xN>
+  *    e.g.  RX 12345 321 8 01 A2 03 ...
   ******************************************************************************
   */
 #ifndef __CONSOLE_H
 #define __CONSOLE_H
 
-#include <stdbool.h>
 #include <stdint.h>
-#include "can.h"
+#include "can_drv.h"
 
+/** Print the banner (call once the console UART is up). */
 void Console_Init(void);
+
+/** Poll RX and execute complete lines; call periodically from console_task. */
 void Console_Task(void);
-bool Console_SniffEnabled(void);
+
+/** 1 while bus monitor mode is armed (can_task prints every frame then). */
+uint8_t Console_SniffEnabled(void);
+
+/** Print one received CAN frame in the RX line format above. */
 void Console_PrintFrame(const CAN_RxMsg *msg);
 
-/* main.c中的调试计数器（定位sniff下协议分发路径是否执行） */
-extern uint32_t g_dbgPoll;                         /* CAN_PollRx取到帧次数 */
-extern uint32_t g_dbgHx;                           /* App_HandleRx调用次数 */
-extern uint32_t g_dbgCmd;                          /* App_HandleCmd调用次数 */
-extern uint32_t g_dbgResp;                         /* App_HandleResp调用次数 */
+/* Debug counters maintained by can_task (kept for the 'stats' command and
+ * for locating protocol-dispatch problems under sniff load). */
+extern uint32_t g_dbgPoll;   /* frames taken from the RX queue        */
+extern uint32_t g_dbgHx;     /* frames dispatched to the protocol     */
+extern uint32_t g_dbgCmd;    /* CMD frames seen (0x321)               */
+extern uint32_t g_dbgResp;   /* RESP frames seen (0x322)              */
 
 #endif /* __CONSOLE_H */

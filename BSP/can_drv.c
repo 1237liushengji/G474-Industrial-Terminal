@@ -30,17 +30,19 @@
   */
 #include "can_drv.h"
 #include "isotp.h"
+#include "FreeRTOS.h"
+#include "queue.h"
 
 /*--------------------------------------- 模块配置 --------------------------------------*/
-/* CAN_RX_RING_LEN（取 2 的幂以用掩码取模）与 CAN_BACKOFF_INIT_MS /
- * CAN_BACKOFF_MAX_MS 均由 app_board_cfg.h 给出 */
+/* CAN_RX_Q_LEN（FreeRTOS 队列深度，元素为 CAN_RxMsg）与 CAN_BACKOFF_INIT_MS /
+ * CAN_BACKOFF_MAX_MS 均由 app_board_cfg.h 给出。
+ * v0.2：接收缓冲由 16 深度 SPSC 环形缓冲改为 FreeRTOS 队列（docs/02 §5
+ * 决策 1）。中断回调只做 xQueueSendFromISR + portYIELD_FROM_ISR，不做解析。 */
 
 /*--------------------------------------- 模块内部变量 --------------------------------------*/
 FDCAN_HandleTypeDef hfdcan;                           /* 实例由 CAN_PERIPH 决定（ISR 引用） */
 
-static CAN_RxMsg    s_rxRing[CAN_RX_RING_LEN];        /* 接收环形缓冲 */
-static volatile uint8_t s_rxW;                        /* 写索引（仅接收中断修改） */
-static volatile uint8_t s_rxR;                        /* 读索引（仅主循环修改） */
+static QueueHandle_t s_rx_queue;                      /* RX FIFO0 -> can_task 交接 */
 
 static uint32_t     s_txTick[256];                    /* MessageMarker -> 入队时刻（测延迟） */
 static uint8_t      s_txMarker;                       /* 下一帧的MessageMarker */
@@ -252,19 +254,30 @@ static HAL_StatusTypeDef CAN_Configure(void)
     return status;
   }
 
-  /* 已停机，无RX中断竞争，复位环形缓冲 */
-  s_rxR = 0U;
-  s_rxW = 0U;
+  /* 队列复位（此时已停机，且由 can_task 上下文调用，无RX中断竞争） */
+  if (s_rx_queue != NULL)
+  {
+    (void)xQueueReset(s_rx_queue);
+  }
 
   return HAL_OK;
 }
 
 /**
-  * @brief  初始化 FDCAN：位时序、过滤器、中断、启动
+  * @brief  初始化 FDCAN：接收队列、位时序、过滤器、中断、启动
   * @retval HAL状态
   */
 HAL_StatusTypeDef CAN_Init(void)
 {
+  if (s_rx_queue == NULL)
+  {
+    s_rx_queue = xQueueCreate(CAN_RX_Q_LEN, sizeof(CAN_RxMsg));
+    if (s_rx_queue == NULL)
+    {
+      return HAL_ERROR;                            /* heap exhausted */
+    }
+  }
+
   s_bitrate         = CAN_BITRATE;
   s_promisc         = false;
   s_loopbackSelfTest = false;
@@ -429,36 +442,34 @@ HAL_StatusTypeDef CAN_Send(uint32_t stdId, const uint8_t *data, uint8_t len)
 }
 
 /**
-  * @brief  轮询取走一帧接收报文（主循环调用）
+  * @brief  取走一帧接收报文（can_task 上下文，非阻塞）
   * @param  msg 输出报文
-  * @retval true取到一帧；false缓冲为空
-  * @note   无锁SPSC：读方仅触碰s_rxR，写方（中断）仅触碰s_rxW；先拷贝数据
-  *         再推进读索引，写方先写数据再推进写索引，配合屏障保证可见性顺序。
+  * @retval true取到一帧；false队列为空
+  * @note   中断侧只投递队列，所有协议处理都发生在任务上下文（docs/02 §5）。
   */
 bool CAN_PollRx(CAN_RxMsg *msg)
 {
-  uint8_t r;
-  uint8_t w;
-
-  if (msg == NULL)
+  if ((msg == NULL) || (s_rx_queue == NULL))
   {
     return false;
   }
+  return (xQueueReceive(s_rx_queue, msg, 0U) == pdTRUE);
+}
 
-  w = s_rxW;                                   /* 先快照写索引 */
-  __DMB();                                     /* 确保读到最新数据前的索引可见性 */
-  r = s_rxR;
-
-  if (r == w)
+/**
+  * @brief  阻塞等待一帧接收报文（can_task 上下文）
+  * @param  msg        输出报文
+  * @param  timeout_ms 队列为空时的最长等待（ms）
+  * @retval 1 取到一帧；0 超时
+  * @note   队列由 ISR 投递，任务在队列上阻塞 = "ISR 通知"语义（docs/02 T1）。
+  */
+uint8_t CAN_WaitRx(CAN_RxMsg *msg, uint32_t timeout_ms)
+{
+  if ((msg == NULL) || (s_rx_queue == NULL))
   {
-    return false;
+    return 0U;
   }
-
-  *msg = s_rxRing[r];                          /* 读取方独占该槽位 */
-  __DMB();
-  s_rxR = (uint8_t)((r + 1U) & (CAN_RX_RING_LEN - 1U));
-
-  return true;
+  return (xQueueReceive(s_rx_queue, msg, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) ? 1U : 0U;
 }
 
 /**
@@ -470,39 +481,35 @@ const CAN_Stats *CAN_GetStats(void)
 }
 
 /**
-  * @brief  RX FIFO0接收回调（中断上下文）：排空FIFO写入环形缓冲
+  * @brief  RX FIFO0接收回调（中断上下文）：逐帧投递到FreeRTOS队列
+  * @note   ISR 只做 xQueueSendFromISR + yield；队列满时丢弃并计入
+  *         rxOverruns（等价于旧环形缓冲满的语义）。
   */
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
   FDCAN_RxHeaderTypeDef rxHeader;
   uint8_t               rxData[CAN_PAYLOAD_LEN];
+  BaseType_t            woken = pdFALSE;
 
   if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0U)
   {
     /* 循环排空FIFO，避免高负载下滞留 */
     while (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxHeader, rxData) == HAL_OK)
     {
-      uint8_t w     = s_rxW;
-      uint8_t next  = (uint8_t)((w + 1U) & (CAN_RX_RING_LEN - 1U));
+      CAN_RxMsg msg;
 
-      if (next == s_rxR)
+      msg.id        = rxHeader.Identifier;
+      msg.timestamp = rxHeader.RxTimestamp;
+      /* V1.2.3的DataLength为原始DLC：经典帧DLC>8时有效字节仍为8 */
+      msg.len       = (rxHeader.DataLength > 8U) ? 8U : (uint8_t)rxHeader.DataLength;
+      for (uint8_t i = 0U; i < msg.len; i++)
       {
-        s_stats.rxOverruns++;                   /* 环形缓冲满：本帧丢弃并统计 */
+        msg.data[i] = rxData[i];
       }
-      else
-      {
-        CAN_RxMsg *slot = &s_rxRing[w];
 
-        slot->id        = rxHeader.Identifier;
-        slot->timestamp = rxHeader.RxTimestamp;
-        /* V1.2.3的DataLength为原始DLC：经典帧DLC>8时有效字节仍为8 */
-        slot->len       = (rxHeader.DataLength > 8U) ? 8U : (uint8_t)rxHeader.DataLength;
-        for (uint8_t i = 0U; i < slot->len; i++)
-        {
-          slot->data[i] = rxData[i];
-        }
-        __DMB();                               /* 先写数据后发布索引 */
-        s_rxW = next;
+      if (xQueueSendFromISR(s_rx_queue, &msg, &woken) != pdTRUE)
+      {
+        s_stats.rxOverruns++;                   /* 队列满：本帧丢弃并统计 */
       }
       s_stats.rxCount++;
     }
@@ -511,6 +518,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
      * V1.2.3的IRQHandler在每次中断结尾检查ErrorCode!=0即误调ErrorCallback，
      * 必须在此主动清除（否则协议错误计数按中断频率虚增） */
     hfdcan->ErrorCode = HAL_FDCAN_ERROR_NONE;
+
+    portYIELD_FROM_ISR(woken);
   }
 
   if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_MESSAGE_LOST) != 0U)

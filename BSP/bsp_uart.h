@@ -1,15 +1,24 @@
 /**
   ******************************************************************************
   * @file    bsp_uart.h
-  * @brief   Register-level USART driver for RS485 link (USART3)
+  * @brief   Register-level USART driver for RS485 link (USART2 on PD5/PD6)
   * @note    Self-contained init (clock + GPIO + NVIC), no CubeMX dependency.
   *          RX is interrupt driven; RX byte is delivered to a callback.
+  *          TX has two paths:
+  *            - blocking (BSP_UART_SendBytes/WaitTxComplete): init/bring-up
+  *            - interrupt driven (BSP_UART_SendBytesAsync): the operating
+  *              path since v0.2 - TXE feeds bytes, TC fires the done-callback
+  *              so the RS485 layer can release the bus without busy-waiting
+  *              (docs/02 §4.3).
   ******************************************************************************
   */
 #ifndef __BSP_UART_H
 #define __BSP_UART_H
 
 #include <stdint.h>
+
+/* Async TX staging buffer: one Modbus RTU ADU max (256 B, docs/03). */
+#define BSP_UART_TX_BUF_LEN       256U
 
 /* RX byte callback, invoked in USART ISR context. */
 typedef void (*bsp_uart_rx_cb_t)(uint8_t byte);
@@ -18,6 +27,10 @@ typedef void (*bsp_uart_rx_cb_t)(uint8_t byte);
    main-loop service routine. */
 typedef void (*bsp_uart_rx_frame_cb_t)(const uint8_t *frame, uint16_t len,
                                        uint32_t now_us);
+
+/* TX-complete callback, invoked in USART ISR context (TC flag set, i.e. the
+   last stop bit has left the shift register). */
+typedef void (*bsp_uart_tx_done_cb_t)(void);
 
 /**
   * @brief  Initialize USART (8N1, baud configurable).
@@ -49,8 +62,24 @@ void BSP_UART_SetRxFrameCallback(bsp_uart_rx_frame_cb_t cb);
 void BSP_UART_RxDmaService(void);
 
 /**
+  * @brief  Register TX-done callback (ISR context, fires on TC after the last
+  *         byte of an async transmission has fully left the shift register).
+  */
+void BSP_UART_SetTxDoneCallback(bsp_uart_tx_done_cb_t cb);
+
+/**
+  * @brief  Interrupt-driven transmit of one frame.  Copies into the staging
+  *         buffer, arms TXE/TC interrupts and returns immediately.
+  * @retval 0 accepted; -1 busy (previous frame still in flight) - the caller
+  *         must treat this as a real error (single-writer invariant broken),
+  *         not retry silently.
+  */
+int32_t BSP_UART_SendBytesAsync(const uint8_t *data, uint16_t len);
+
+/**
   * @brief  Blocking transmit of len bytes (waits TXE for each byte).
-  * @note   Does NOT wait TC - caller (RS485 layer) decides direction timing.
+  * @note   Kept for bring-up/init paths; the RS485 frame path uses
+  *         BSP_UART_SendBytesAsync since v0.2.
   */
 void BSP_UART_SendBytes(const uint8_t *data, uint16_t len);
 
@@ -61,7 +90,7 @@ void BSP_UART_SendBytes(const uint8_t *data, uint16_t len);
 void BSP_UART_WaitTxComplete(void);
 
 /**
-  * @brief  USART3 global ISR entry (called from vector table).
+  * @brief  USART global ISR entry (vector symbol comes from app_board_cfg.h).
   */
 void BSP_UART_IRQHandler(void);
 

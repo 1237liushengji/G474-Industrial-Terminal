@@ -3,7 +3,7 @@
   * @file    bsp_uart.c
   * @brief   Register-level USART3 driver for RS485 link.
   *
-  *  RX architecture selected by RS485_RX_MODE (bsp_board_cfg.h):
+  *  RX architecture selected by RS485_RX_MODE (app_board_cfg.h):
   *    0 - RXNE interrupt per byte (default, verified on hardware)
   *    1 - DMA circular + IDLE frame detection (V1.4, optional):
   *        UART --DMA--> s_dma_buf --(IDLE ISR)--> s_ring --(service)--> frame
@@ -19,7 +19,10 @@
   *   - BSP_UART_RxDmaService() (main loop) waits t3.5 of silence and then
   *     emits the complete frame through the frame callback
   *
-  *  TX is blocking with explicit TC wait (RS485 direction switching).
+  *  TX: blocking helper kept for bring-up; the frame path uses the
+  *      interrupt-driven async sender added in v0.2 (TXE feeds bytes,
+  *      TC completes and calls the done-callback -> RS485 releases the
+  *      bus without busy-waiting, docs/02 §4.3).
   ******************************************************************************
   */
 #include "bsp_uart.h"
@@ -31,6 +34,13 @@
 /* Local objects                                                       */
 /*====================================================================*/
 static bsp_uart_rx_cb_t s_rx_cb = 0;
+
+/*--- async TX state (touched by USART ISR + caller task, single writer) ---*/
+static uint8_t          s_tx_buf[BSP_UART_TX_BUF_LEN];
+static volatile uint16_t s_tx_len = 0U;      /* bytes staged this frame   */
+static volatile uint16_t s_tx_pos = 0U;      /* bytes handed to TDR       */
+static volatile uint8_t  s_tx_busy = 0U;     /* 1 = frame in flight       */
+static bsp_uart_tx_done_cb_t s_tx_done_cb = 0;
 static bsp_uart_rx_frame_cb_t s_frame_cb = 0;
 
 #if (RS485_RX_MODE == 1)
@@ -132,8 +142,8 @@ int32_t BSP_UART_Init(uint32_t baudrate)
     RS485_UART_PERIPH->CR1 |= USART_CR1_RXNEIE;
 #endif
 
-    /* NVIC: medium priority, enable USART3 IRQ */
-    HAL_NVIC_SetPriority(RS485_UART_IRQn, 5, 0);
+    /* NVIC: RS485 line, priority per the NVIC table (docs/04 §5) */
+    HAL_NVIC_SetPriority(RS485_UART_IRQn, IRQ_PRIO_RS485, 0);
     HAL_NVIC_EnableIRQ(RS485_UART_IRQn);
 
     return 0;
@@ -161,6 +171,40 @@ void BSP_UART_SetRxFrameCallback(bsp_uart_rx_frame_cb_t cb)
 #else
     (void)cb;
 #endif
+}
+
+void BSP_UART_SetTxDoneCallback(bsp_uart_tx_done_cb_t cb)
+{
+    s_tx_done_cb = cb;
+}
+
+int32_t BSP_UART_SendBytesAsync(const uint8_t *data, uint16_t len)
+{
+    uint16_t i;
+
+    if ((data == 0) || (len == 0U) || (len > BSP_UART_TX_BUF_LEN))
+    {
+        return -1;
+    }
+    if (s_tx_busy != 0U)
+    {
+        return -1;                              /* frame still in flight */
+    }
+
+    for (i = 0U; i < len; i++)
+    {
+        s_tx_buf[i] = data[i];
+    }
+    s_tx_len = len;
+    s_tx_pos = 0U;
+    s_tx_busy = 1U;
+
+    /* Clear a stale TC from a previous/never-used frame, then arm both
+     * interrupts: TXE feeds the bytes, TC marks the true end of frame. */
+    RS485_UART_PERIPH->ICR = USART_ICR_TCCF;
+    RS485_UART_PERIPH->CR1 |= (USART_CR1_TXEIE | USART_CR1_TCIE);
+
+    return 0;
 }
 
 void BSP_UART_SendBytes(const uint8_t *data, uint16_t len)
@@ -265,7 +309,40 @@ void BSP_UART_RxDmaService(void)
 /*====================================================================*/
 void BSP_UART_IRQHandler(void)
 {
-    uint32_t isr = RS485_UART_PERIPH->ISR;
+    uint32_t isr  = RS485_UART_PERIPH->ISR;
+    uint32_t cr1  = RS485_UART_PERIPH->CR1;
+
+    /*---- TX: feed the shift register byte by byte (TXE interrupt) ----*/
+    if (((isr & USART_ISR_TXE_TXFNF) != 0U) && ((cr1 & USART_CR1_TXEIE) != 0U))
+    {
+        if (s_tx_pos < s_tx_len)
+        {
+            RS485_UART_PERIPH->TDR = s_tx_buf[s_tx_pos];
+            s_tx_pos++;
+        }
+        if (s_tx_pos >= s_tx_len)
+        {
+            RS485_UART_PERIPH->CR1 &= ~USART_CR1_TXEIE;   /* nothing left to feed */
+        }
+    }
+
+    /*---- TX complete: last stop bit shifted out (TC interrupt) ----
+     * The TC branch only completes the frame when every byte has been handed
+     * over; a TC observed earlier (inter-byte gap artifact) is cleared and
+     * ignored so the RS485 direction switch can never cut a frame short. */
+    if (((isr & USART_ISR_TC) != 0U) && ((cr1 & USART_CR1_TCIE) != 0U))
+    {
+        RS485_UART_PERIPH->ICR = USART_ICR_TCCF;
+        if (s_tx_pos >= s_tx_len)
+        {
+            RS485_UART_PERIPH->CR1 &= ~USART_CR1_TCIE;
+            s_tx_busy = 0U;
+            if (s_tx_done_cb != 0)
+            {
+                s_tx_done_cb();
+            }
+        }
+    }
 
 #if (RS485_RX_MODE == 1)
     /* IDLE line: one frame arrived completely -> pull into ring */

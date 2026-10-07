@@ -1,22 +1,25 @@
 /**
   ******************************************************************************
-  * @file    slave_main.c
-  * @brief   Slave node (B board) application entry.
-  * @note    Compiled only when MODBUS_NODE_ROLE == NODE_ROLE_SLAVE.
+  * @file    node_app.c
+  * @brief   Node role (B board) application - Modbus slave + local HMI.
+  *
+  *  v0.2 (FreeRTOS) split:
+  *    Node_TaskMain()  mb_task (T2): CONFIG/RS485/slave-engine init + poll loop
+  *    Node_UiInit()    ui_task (T6): LCD + key bring-up
+  *    Node_UiStep()    ui_task (T6): key scan + refresh, called every 5 ms
   *
   *  v1.0 UI: 3 pages on the SPI TFT LCD
   *    HOME    - device info + live measurands + comm counters
   *    ERROR   - CRC / exception counters
   *    CONFIG  - editable parameters (K1 modify, WKUP confirm+save)
   *  Key K0 cycles pages. Parameters edited here go through the register
-  *  bank -> auto-saved to 24C02 by the config layer.
+  *  bank -> auto-saved to 24C02 via log_task (LOG_SVC_PostConfigSave).
   ******************************************************************************
   */
 #include "node_app.h"
 
 #include <string.h>
 #include "bsp_led.h"
-#include "bsp_iwdg.h"
 #include "can_drv.h"
 #include "isotp.h"
 #include "bsp_rs485.h"
@@ -25,20 +28,26 @@
 #include "app_board_cfg.h"
 #include "bsp_lcd.h"
 #include "bsp_key.h"
-#include "bsp_w25q128.h"
 #include "modbus_slave.h"
 #include "modbus_register.h"
 #include "config.h"
 #include "log.h"
+#include "log_service.h"
 #include "types.h"
+#include "app_rtos.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
 
 /*====================================================================*/
-/* Log event bridge (slave engine events -> W25Q128)                   */
+/* Log event bridge (slave engine events -> log_task queue)            */
 /*====================================================================*/
 static void Slave_LogEvent(uint8_t event, uint16_t param)
 {
-    LOG_WriteEvent((log_event_t)event,
-                   (uint8_t)(param & 0xFFU), (uint8_t)((param >> 8) & 0xFFU), 0U);
+    /* Ordered by arrival; the blocking flash write happens in log_task (T5). */
+    (void)LOG_SVC_PostEvent(event,
+                            (uint8_t)(param & 0xFFU),
+                            (uint8_t)((param >> 8) & 0xFFU), 0U);
 }
 
 /*====================================================================*/
@@ -108,9 +117,25 @@ static void U16ToStr1(uint16_t v, char *out)
 /*====================================================================*/
 /* RX bridge                                                           */
 /*====================================================================*/
+static TaskHandle_t s_mb_task = 0;          /* mb_task, for TX-done wakes */
+
 static void RSCB_SlaveRx(uint8_t byte)
 {
     MB_Slave_OnRxByte(byte, BSP_Tick_GetUs());
+}
+
+/* TC reached: the bus is back in RX mode (done inside bsp_rs485's bridge).
+ * Wake the mb task so the engine loop continues without waiting the full
+ * 1 ms tick - docs/02 §4.3 "TC ISR -> vTaskNotifyGive(mb_task)". */
+static void RSCB_SlaveTxDone(void)
+{
+    BaseType_t woken = pdFALSE;
+
+    if (s_mb_task != 0)
+    {
+        vTaskNotifyGiveFromISR(s_mb_task, &woken);
+    }
+    portYIELD_FROM_ISR(woken);
 }
 
 #if (RS485_RX_MODE == 1)
@@ -125,9 +150,6 @@ static void RSCB_SlaveRxFrame(const uint8_t *frame, uint16_t len,
     }
 }
 #endif
-
-/* defined below, used in the main loop */
-static void Slave_ApplyConfigChange(void);
 
 /*====================================================================*/
 /* Home page                                                           */
@@ -321,12 +343,6 @@ static void UI_DrawConfigValues(void)
     }
 }
 
-static void UI_DrawConfigFrame(void)
-{
-    UI_DrawConfig();
-    UI_DrawConfigValues();
-}
-
 /*====================================================================*/
 /* Page dispatcher + key handling                                      */
 /*====================================================================*/
@@ -415,13 +431,6 @@ static void UI_DrawValues(void)
     }
 }
 
-/* full redraw of the config page (static frame + values) used on edits */
-static void UI_DrawConfigFull(void)
-{
-    UI_DrawConfig();
-    UI_DrawConfigValues();
-}
-
 static void UI_Update(void)
 {
     uint32_t now = HAL_GetTick();
@@ -434,15 +443,8 @@ static void UI_Update(void)
            stay visible (labels of the old page are not overwritten by
            the new page's sparse label layout) */
         LCD_Clear();
-        if (s_page == UI_PAGE_CONFIG)
-        {
-            UI_DrawConfigFull();   /* labels + values, single shot */
-        }
-        else
-        {
-            UI_DrawStatic();
-            UI_DrawValues();
-        }
+        UI_DrawStatic();
+        UI_DrawValues();
     }
     else if ((now - s_ui_last_ms) >= 500U)
     {
@@ -458,26 +460,110 @@ static void UI_Update(void)
 }
 
 /*====================================================================*/
-/* Entry                                                               */
+/* UI entry points (ui_task)                                           */
 /*====================================================================*/
-void Slave_Main(void)
+void Node_UiInit(void)
+{
+    KEY_Init();
+    LCD_Init();
+
+    s_ui_last_ms = HAL_GetTick();
+    s_ui_redraw = 1U;
+}
+
+void Node_UiStep(void)
+{
+    key_id_t key;
+    key_event_t kev = KEY_Scan(&key);
+
+    if (kev != KEY_EVENT_NONE)
+    {
+        UI_HandleKey(kev, key);
+    }
+    UI_Update();
+}
+
+/*====================================================================*/
+/* Config auto-save service (async via log_task)                       */
+/*====================================================================*/
+static uint8_t s_cfg_save_pending = 0U;
+
+/* live-apply protocol-side settings that depend on config registers */
+static void Node_ApplyLiveParams(void)
+{
+    static uint32_t s_applied_baud = 0U;   /* baud actually set on the UART */
+    uint32_t baud;
+
+    MB_Slave_SetSlaveId((uint8_t)MB_REG_GetSlaveId());
+    baud = MB_REG_BaudFromIdx((uint8_t)MB_REG_GetBaudIdx());
+    if (s_applied_baud == 0U)
+    {
+        s_applied_baud = RS485_DEFAULT_BAUDRATE;  /* baud set in RS485_Init */
+    }
+    if (baud != s_applied_baud)
+    {
+        /* reprogram the UART even when the new baud equals the default
+           115200 (the old code skipped this, leaving the link dead
+           after switching 9600 -> 115200) */
+        BSP_UART_SetBaudrate(baud);
+        s_applied_baud = baud;
+    }
+    MB_Slave_SetBaudrate(baud);
+}
+
+static void Node_ConfigSaveService(void)
+{
+    static uint32_t s_last_req_ms = 0U;
+    uint8_t done;
+
+    /* completion of a previous async save (executed in log_task) */
+    done = LOG_SVC_TakeConfigSaveDone();
+    if (done == 1U)
+    {
+        MB_REG_ClearConfigDirty();      /* value on media == registers */
+        s_cfg_save_pending = 0U;
+    }
+    else if (done == 2U)
+    {
+        s_cfg_save_pending = 0U;        /* dirty stays set -> retried below */
+    }
+    else
+    {
+        /* nothing new */
+    }
+
+    if ((MB_REG_ConfigDirty() == 0U) || (s_cfg_save_pending != 0U))
+    {
+        return;
+    }
+
+    /* 20 ms retry cadence, same policy as v2.0 */
+    if ((HAL_GetTick() - s_last_req_ms) >= 20U)
+    {
+        config_param_t p;
+
+        s_last_req_ms = HAL_GetTick();
+        CONFIG_ReadFromRegisters(&p);
+        if (LOG_SVC_PostConfigSave(&p) != 0U)
+        {
+            s_cfg_save_pending = 1U;
+            Node_ApplyLiveParams();     /* takes effect immediately; the
+                                           flash/EEPROM write follows (T5) */
+        }
+    }
+}
+
+/*====================================================================*/
+/* mb_task body (T2)                                                   */
+/*====================================================================*/
+void Node_TaskMain(void)
 {
     config_param_t cfg;
     uint32_t baud;
     uint8_t  slave_id;
-    uint32_t last_save_check = 0U;
-    key_id_t key;
-    key_event_t kev;
 
-    MB_REG_Init();
-
-    /* flash log subsystem (W25Q128) */
-    (void)W25Q_Init();
-    LOG_SetTickSource(HAL_GetTick);
-    LOG_Init();
-    LOG_WriteEvent(LOG_BOOT, 0U, 0U, 0U);
-
-    /* load parameters from 24C02 */
+    /* load parameters from 24C02 (MB_REG_Init already ran in App_RtosInit;
+     * the W25Q log was brought up by log_task incl. the LOG_BOOT record). */
     (void)CONFIG_Init(&cfg);
     CONFIG_ApplyToRegisters(&cfg);
     MB_REG_ClearConfigDirty();
@@ -487,6 +573,8 @@ void Slave_Main(void)
 
     RS485_Init(baud);
     RS485_SetRxCallback(RSCB_SlaveRx);
+    RS485_SetTxDoneCallback(RSCB_SlaveTxDone);
+    s_mb_task = xTaskGetCurrentTaskHandle();
 #if (RS485_RX_MODE == 1)
     RS485_SetRxFrameCallback(RSCB_SlaveRxFrame);
 #endif
@@ -495,30 +583,14 @@ void Slave_Main(void)
     MB_Slave_SetTxFunc(RS485_SendFrame);
     MB_Slave_SetEventCallback(Slave_LogEvent);
 
-    KEY_Init();
-    LCD_Init();
-
-    LED1_OFF;
-    LED2_OFF;
-    s_ui_last_ms = HAL_GetTick();
-    s_ui_redraw = 1U;
-
     /* seed demo measurands into register bank (visible to master) */
     MB_REG_SetHolding(MB_REG_HOLD_TEMP, s_demo_temp);
     MB_REG_SetHolding(MB_REG_HOLD_HUMI, s_demo_humi);
     MB_REG_SetHolding(MB_REG_HOLD_VOLT, s_demo_volt);
     MB_REG_SetHolding(MB_REG_HOLD_CURR, s_demo_curr);
 
-    while (1)
+    for (;;)
     {
-        /* CAN backbone housekeeping + watchdog.
-         * CAN_Task() drives bus-off exponential backoff and drains the
-         * TX-event confirmations; IsoTp_Task() paces the snapshot
-         * transport (STmin / N_Bs / N_Cr).  Both are non-blocking. */
-        CAN_Task();
-        IsoTp_Task();
-        BSP_IWDG_Refresh();
-
         /* Modbus engine */
 #if (RS485_RX_MODE == 1)
         BSP_UART_RxDmaService();   /* delivers frames -> RxFrame callback */
@@ -529,58 +601,13 @@ void Slave_Main(void)
         }
 #endif
 
-        /* keys every ~5 ms */
-        kev = KEY_Scan(&key);
-        if (kev != KEY_EVENT_NONE)
-        {
-            UI_HandleKey(kev, key);
-        }
+        /* auto-save config changed by Modbus writes or local UI edits */
+        Node_ConfigSaveService();
 
-        /* LCD refresh (500 ms + on change) */
-        UI_Update();
+        App_Hb_Beat(APP_HB_MB);
 
-        /* auto-save config changed by Modbus writes (40010..40015) */
-        if (MB_REG_ConfigDirty() &&
-            ((HAL_GetTick() - last_save_check) >= 20U))
-        {
-            last_save_check = HAL_GetTick();
-            Slave_ApplyConfigChange();
-        }
-
-        HAL_Delay(2);
-    }
-}
-
-/* re-apply protocol-side settings that depend on config registers */
-static void Slave_ApplyConfigChange(void)
-{
-    config_param_t p;
-    static uint32_t s_applied_baud = 0U;   /* baud actually set on the UART */
-
-    CONFIG_ReadFromRegisters(&p);
-    if (CONFIG_Save(&p))
-    {
-        MB_REG_ClearConfigDirty();
-        LOG_WriteEvent(LOG_CONFIG_CHANGE, p.slave_id,
-                       (uint8_t)p.baud_idx, 0U);
-    }
-
-    /* live apply: slave id + baudrate */
-    MB_Slave_SetSlaveId(MB_REG_GetSlaveId());
-    {
-        uint32_t baud = MB_REG_BaudFromIdx((uint8_t)MB_REG_GetBaudIdx());
-        if (s_applied_baud == 0U)
-        {
-            s_applied_baud = RS485_DEFAULT_BAUDRATE;  /* baud set in RS485_Init */
-        }
-        if (baud != s_applied_baud)
-        {
-            /* reprogram the UART even when the new baud equals the default
-               115200 (the old code skipped this, leaving the link dead
-               after switching 9600 -> 115200) */
-            BSP_UART_SetBaudrate(baud);
-            s_applied_baud = baud;
-        }
-        MB_Slave_SetBaudrate(baud);
+        /* Sleep until an RX/TX event wakes us or 1 ms elapses (v0.1 used
+         * HAL_Delay(2); the TC interrupt now shortens the TX turnaround). */
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
     }
 }

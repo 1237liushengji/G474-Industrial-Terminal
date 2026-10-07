@@ -2,7 +2,8 @@
 
 基于两块 DRG ST-10 STM32G474VET6 开发板，把既有的 **CAN 双机通信（v3.0）** 与
 **Modbus-RTU 双节点（v2.0）** 两个已验证工程，演进为一套带本地 HMI、离线缓存与 MQTT 上云能力的
-边缘采集网关。当前状态：**架构方案已定稿并完成板级硬件核对，尚未写入固件代码。**
+边缘采集网关。当前状态：**v0.2 已落地（FreeRTOS 移植 + TIM6 时基 + NVIC 整改 + 日志/配置任务化），
+4 Target 全量重建 0 Error / 0 Warning；尚未上板验证**（上板验收项见 docs/迁移说明 §9.4）。
 
 ## 系统框图
 
@@ -58,18 +59,20 @@
 | [05 · 实施路线与验收矩阵](docs/05-实施路线与验收矩阵.md) | v0.1→v1.0 八个里程碑、14 项带数字的验收判据、11 种故障注入 | 每个 tag 收口时 |
 | [06 · 资产复用与冲突消解](docs/06-资产复用与冲突消解.md) | 可复用资产总账、冲突决议、11 处文档-代码漂移、合并前置动作 | v0.1 执行时逐条照做 |
 
-## 目录结构（已建骨架，尚未放代码）
+## 目录结构（v0.2：FreeRTOS 已入仓，任务集在 App/app_rtos.c）
 
 ```
-App/        角色应用：gw_app.c / node_app.c              （待 v0.1）
+App/        app_rtos(T1/T2/T5/T6/T7 任务集+心跳+故障钩子) mb_master_port gw 角色 node_app 节点角色+UI
 Gateway/    can_router / dp_table / bridge / uplink_port  （待 v0.3–v0.4）
 Network/    mqttc/ + esp_at + at_window + backfill        （待 v0.6）
-Protocol/   modbus_*  isotp  uds                          （从两工程搬入）
-BSP/        app_board_cfg.h  uart rs485 tick eeprom w25q128 lcd key led
-Storage/    config.c(24C02)  log.c(W25Q 环形 + 待发配额)
-Common/     types.h  ring_buffer.c  bsp_printf.c  fmt.c
+Protocol/   modbus_*  isotp  uds（uds 自 v0.2 起参与编译）
+BSP/        app_board_cfg.h  bsp_console(USART1)  bsp_uart(RS485 TXE/TC 中断)  rs485 tick eeprom w25q128 lcd key led iwdg can_drv(队列)
+Storage/    config.c(24C02)  log.c(W25Q 256KB 环形)  log_service.c(队列化,log_task)
+Common/     types.h  ring_buffer.c  bsp_printf.c(4x128B/任务+互斥)  console.c
+Middlewares/FreeRTOS-Kernel/  V10.5.1 裁剪版（tasks/list/queue/port/heap_4, GCC/ARM_CM4F 端口）
 Tools/python/    modbus/ can/ mqtt/ verification/         离线回归 + 压测 + 影子网关
 Tools/verification/ crc_check.js  modbus_vectors.js       黄金向量生成器（原样复用）
+Tools/ci/        check_config_points.sh                  A-01 单一配置点检查（v0.2 新增）
 docs/       本方案文档集 + 后续实验记录
 MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 ```
@@ -79,6 +82,7 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 | 项 | 值 |
 |---|---|
 | MCU | STM32G474VETx，512 KB Flash / 128 KB SRAM，SYSCLK 150 MHz（HSE 8 MHz→PLL /2 ×75 /2），APB 全 /1 |
+| RTOS | FreeRTOS-Kernel **V10.5.1**（`Middlewares/`，GCC/ARM_CM4F 端口适配 ARMCLANG V6.14）；HAL 时基 = TIM6，SysTick 归内核 |
 | IDE | Keil MDK，ARMCLANG V6.14，DFP `STM32G4xx_DFP 2.2.0`，HAL **V1.2.3**（锁版本，勿顺手升级） |
 | PC | Windows 11 22631；Python 3.14.7（`pyserial` / `pypdf` / `pypdfium2`）；Node v26.7.0 |
 | Broker | Mosquitto 2.1.2，`E:\Edge\mosquitto-2.1.2` |
@@ -89,11 +93,15 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 
 ## 下一步
 
-按 [docs/07 §9](docs/07-板级硬件核对与冲突修正.md) 的接线变更单 + [docs/06 §4](docs/06-资产复用与冲突消解.md) 的合并前置动作执行 v0.1。
+**v0.2 代码层已收口**（[docs/迁移说明 §9](docs/迁移说明.md)：落地清单 / 偏离清单 / 证据）。
+剩余两件事：
 
-**需要你拍板的一件事**：v0.1 搬移用 `git subtree`/`filter-repo`（保留两工程历史，多约半天）还是纯 `cp`（快，丢历史）。
+1. **上板验收**（v0.2 出口条件，需先按下列接线）：A-02 双时基一致性（10 min）、
+   A-03/A-04 CAN 复测（FDCAN1 + 优先级 (6,0) 变更后必做）、A-09 引脚断言、A-10 栈水位 24 h。
+   证据按 docs/05 惯例归档 `Tools/python/results/`。
+2. **v0.3 契约落地**：`dp_table` + 契约哈希 + `contract_check.py`（见 docs/05）。
 
-**三根线先接起来**（v0.1 bring-up 前的物理准备）：
+**上板前三根线**（相对 v0.1 不变，v0.1 时已公告）：
 - CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）
 - RS485 模块：`PB10/PB11` → **`PD5/PD6`**（J1 pin 24/25）
 - ESP-12F：保持 **`PB10/PB11`**（J2 pin 20/17），跳线帽归 WiFi —— 与 RS485 不再共针

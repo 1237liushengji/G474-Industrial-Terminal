@@ -15,8 +15,10 @@
   */
 #include "uds.h"
 #include "isotp.h"
-#include "can.h"
-#include "bsp_uart.h"
+#include "can_drv.h"
+#include "app_board_cfg.h"
+#include "bsp_console.h"
+#include "bsp_printf.h"
 #include <string.h>
 
 /*--------------------------------------- 模块状态 --------------------------------------*/
@@ -255,7 +257,7 @@ static void Uds_ClientErr(IsoTp_Result result)
     case ISOTP_OVERFLOW:    msg = "diag: isotp overflow\r\n"; break;
     default:                msg = "diag: isotp error\r\n"; break;
   }
-  BSP_UART_Send(msg, (uint16_t)strlen(msg));
+  BSP_Console_Puts(msg);
   s_pendingResp = false;
 }
 
@@ -295,12 +297,12 @@ void Uds_ClientOnMsg(const uint8_t *rsp, uint16_t len)
     /* 其他应答 */
   }
 
-  BSP_UART_Printf("diag<< (%u bytes):", (unsigned)len);
+  BSP_Printf("diag<< (%u bytes):", (unsigned)len);
   for (uint16_t i = 0U; i < len; i++)
   {
-    BSP_UART_Printf(" %02X", rsp[i]);
+    BSP_Printf(" %02X", rsp[i]);
   }
-  BSP_UART_Send("\r\n", 2U);
+  BSP_Console_Puts("\r\n");
 
   /* 友好解码常见应答 */
   if (len >= 3U)
@@ -310,31 +312,31 @@ void Uds_ClientOnMsg(const uint8_t *rsp, uint16_t len)
       uint16_t did = (uint16_t)(((uint16_t)rsp[1] << 8) | rsp[2]);
       if ((did == UDS_DID_VERSION) && (len > 3U))
       {
-        BSP_UART_Send("  ver: ", 7U);
-        BSP_UART_Send((const char *)&rsp[3], (uint16_t)(len - 3U));
-        BSP_UART_Send("\r\n", 2U);
+        BSP_Console_Puts("  ver: ");
+        BSP_Console_Send((const uint8_t *)&rsp[3], (uint16_t)(len - 3U));
+        BSP_Console_Puts("\r\n");
       }
       else if ((did == UDS_DID_UPTIME) && (len == 7U))
       {
         uint32_t up = ((uint32_t)rsp[3] << 24) | ((uint32_t)rsp[4] << 16) |
                       ((uint32_t)rsp[5] << 8) | rsp[6];
-        BSP_UART_Printf("  uptime: %lus\r\n", (unsigned long)up);
+        BSP_Printf("  uptime: %lus\r\n", (unsigned long)up);
       }
       else if ((did == UDS_DID_LED) && (len == 4U))
       {
-        BSP_UART_Printf("  led: %u\r\n", (unsigned)rsp[3]);
+        BSP_Printf("  led: %u\r\n", (unsigned)rsp[3]);
       }
     }
     else if (rsp[0] == 0x7FU)
     {
-      BSP_UART_Printf("  NRC: sid=%02X code=%02X\r\n", rsp[1], rsp[2]);
+      BSP_Printf("  NRC: sid=%02X code=%02X\r\n", rsp[1], rsp[2]);
     }
     else if (rsp[0] == 0x59U)
     {
-      BSP_UART_Send("  DTC list (id,active):\r\n", 24U);
+      BSP_Console_Puts("  DTC list (id,active):\r\n");
       for (uint16_t i = 3U; (i + 2U) < len; i += 3U)
       {
-        BSP_UART_Printf("   %02X%02X %u\r\n", rsp[i], rsp[i + 1U], rsp[i + 2U]);
+        BSP_Printf("   %02X%02X %u\r\n", rsp[i], rsp[i + 1U], rsp[i + 2U]);
       }
     }
   }
@@ -352,7 +354,7 @@ void Uds_Init(void)
   s_clientExtended = false;
   s_lastTpTick = HAL_GetTick();
 
-#if (CAN_NODE_ROLE == CAN_NODE_A)
+#if ROLE_IS_GW
   IsoTp_Init(ISOTP_DIAG_RESP_ID, ISOTP_DIAG_REQ_ID,
              Uds_ClientOnMsg, Uds_ClientErr);
 #else
@@ -379,7 +381,7 @@ void Uds_Task(void)
   if (s_pendingResp && ((now - s_pendingTick) > ISOTP_TIMEOUT_MS))
   {
     s_pendingResp = false;
-    BSP_UART_Send("diag: response timeout\r\n", 25U);
+    BSP_Console_Puts("diag: response timeout\r\n");
   }
 
   /* 客户端：扩展会话期间每2s发TesterPresent(3E 80抑制正应答)保活S3，
