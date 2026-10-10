@@ -45,10 +45,15 @@
  *-------------------------------------------------------------------------*/
 #define configSUPPORT_STATIC_ALLOCATION          0
 #define configSUPPORT_DYNAMIC_ALLOCATION         1
+/* 2026-10-10 bring-up (docs/迁移说明 §18): 20K/18K starved the heap -
+ * measured demand = task stacks 19.5K (incl. 4K uplink + 4K ui) + TCBs +
+ * the dynamic queues (CAN rx 32x16B, log 16x36B, snapshot 8x129B, uplink
+ * evq) ~= 23K.  The overflow died in vApplicationMallocFailedHook.
+ * Both roles now get 26K; the MCU has 96K of usable SRAM. */
 #if defined( NODE_ROLE ) && ( NODE_ROLE == 1 )
-  #define configTOTAL_HEAP_SIZE                  ( 18U * 1024U )  /* node */
+  #define configTOTAL_HEAP_SIZE                  ( 26U * 1024U )  /* node */
 #else
-  #define configTOTAL_HEAP_SIZE                  ( 20U * 1024U )  /* gateway */
+  #define configTOTAL_HEAP_SIZE                  ( 26U * 1024U )  /* gateway */
 #endif
 #define configAPPLICATION_ALLOCATED_HEAP         0
 

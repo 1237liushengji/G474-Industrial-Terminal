@@ -124,7 +124,9 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 2. **v0.8 已随本版一并交付**：一键验收脚本 + README 验收矩阵表（见下）；**tag v1.0 等待
    硬件全绿后打**（不打"纸面 v1.0"）。
 
-**上板前三根线**（相对 v0.1 不变）：
-- CAN 收发器：`PB12/PB13` → **`PD0/PD1`**（J1 pin 19/20）
-- RS485 模块：`PB10/PB11` → **`PD5/PD6`**（J1 pin 24/25）
-- ESP-12F：保持 **`PB10/PB11`**（J2 pin 20/17），跳线帽归 WiFi —— 与 RS485 不再共针
+**上板接线（丝印终审版，2026-10-10 实机验证）**：
+- **跳线帽**：B 板插 485+CAN；A 板 M1 插 485+CAN / M2 插 **WiFi**+CAN（详见迁移说明 §17）
+- **USB-TTL → USART1（PA9/PA10）**：⚠️ **只接 3 根：TXD→PA10、RXD→PA9、GND↔GND**；
+  **DTR / RTS 等其余线一律拔除**——实机踩坑确认：DTR/RTS 接上会"打开串口即复位板子"甚至导致 MCU LOCKUP（迁移说明 §18.3）
+- **ST-Link ×2 同时可用**：`STM32_Programmer_CLI -c port=SWD index=0/1` 分别操作 A/B 板；
+  调试期读取用 `mode=hotplug`（不复位不打断，Normal 模式会软复位）
