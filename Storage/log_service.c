@@ -164,7 +164,13 @@ void LOG_SVC_Process(void)
 {
     log_req_t req;
 
-    if ((s_q == 0) || (xQueueReceive(s_q, &req, portMAX_DELAY) != pdTRUE))
+    /* 1000 ms receive timeout (HW bring-up 2026-10-11, docs §18.6):
+     * an IDLE log task must still tick its heartbeat every second.  With
+     * portMAX_DELAY the beat stops while the queue is empty, which the
+     * watchdog (LOG deadline = 4 s) misreads as a stall and then stops
+     * feeding the IWDG -> a 4-5 s reset loop.  The timeout costs one
+     * wake-up per second when idle and changes nothing when busy. */
+    if ((s_q == 0) || (xQueueReceive(s_q, &req, pdMS_TO_TICKS(1000)) != pdTRUE))
     {
         return;
     }

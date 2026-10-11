@@ -794,6 +794,11 @@ void Bridge_TaskMain(void)
     IsoTp_Init(&s_snap_tp, CANC_ID_SNAPSHOT_REQ, CANC_ID_SNAPSHOT_DATA,
                Snap_RxCallback, Snap_ErrCallback);
     s_tx_tele_last = s_tx_status_last = s_tx_cntrs_last = HAL_GetTick();
+    /* v0.4->HW bring-up 2026-10-11 (docs §18.6): the node also sends its
+     * periodic heartbeat - this initialisation was missing on the node
+     * path, so Bridge_TxHb (0x501) was never called there and the gateway
+     * never saw its peer (peer=0 / LINK bit stayed dark). */
+    s_tx_hb_last = HAL_GetTick() - CANC_HB_PERIOD_MS;   /* first HB now */
 #endif
 
     s_snap_q = xQueueCreate(SNAP_RX_Q_LEN, sizeof(CAN_RxMsg));
@@ -816,6 +821,12 @@ void Bridge_TaskMain(void)
 #if ROLE_IS_GW
         Gw_Loop(now);
 #else
+        /* heartbeat first (same 1 s cadence as the gateway side) */
+        if ((now - s_tx_hb_last) >= CANC_HB_PERIOD_MS)
+        {
+            s_tx_hb_last = now;
+            Bridge_TxHb();
+        }
         if ((now - s_tx_tele_last) >= CANC_TELE_PERIOD_MS)
         {
             s_tx_tele_last = now;
