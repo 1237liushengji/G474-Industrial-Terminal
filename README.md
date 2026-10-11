@@ -130,3 +130,7 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
   **DTR / RTS 等其余线一律拔除**——实机踩坑确认：DTR/RTS 接上会"打开串口即复位板子"甚至导致 MCU LOCKUP（迁移说明 §18.3）
 - **ST-Link ×2 同时可用**：`STM32_Programmer_CLI -c port=SWD index=0/1` 分别操作 A/B 板；
   调试期读取用 `mode=hotplug`（不复位不打断，Normal 模式会软复位）
+- **两板 option bytes 已固化 `nSWBOOT0=0 + nBOOT0=1`**（2026-10-11，实机排障产物）：
+  板载 CH340 一键下载电路的 DTR→BOOT0 脉冲不再能把芯片带入系统 bootloader
+  （此前表现为"打开串口即静默/CPU 进 bootloader"）。**副作用**：串口 ISP 下载
+  （FlyMcu/硬件 BOOT0）失效，烧录统一走 ST-Link；如需恢复：`-ob nSWBOOT0=1`。
