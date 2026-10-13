@@ -25,7 +25,7 @@
 #define EEPROM_I2C_AF           GPIO_AF4_I2C1
 #endif
 
-#define EEPROM_DEV_ADDR         (0xA0U >> 1)   /* 7-bit: 0x50 */
+#define EEPROM_DEV_ADDR         0xA0U          /* 7-bit 0x50 shifted left for HAL */
 #define EEPROM_PAGE_SIZE        8U
 #define EEPROM_SIZE             256U
 #define EEPROM_WRITE_CYCLE_MS   5U

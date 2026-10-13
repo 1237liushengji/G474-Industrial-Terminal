@@ -47,14 +47,12 @@
 #define POLL_PERIOD_MS       500U
 #define MASTER_TIMEOUT_MS    100U
 #define MASTER_RETRY_MAX     2U
-#define WRITE_EVERY_N_POLLS  10U    /* demo: write TempLimit every 10th poll */
 
 /*====================================================================*/
 /* Local                                                                */
 /*====================================================================*/
 static volatile uint32_t s_poll_last_ms = 0U;
 static volatile uint32_t s_fault_led_ms  = 0U;
-static volatile uint32_t s_poll_count    = 0U;
 static uint8_t s_target_slave = MASTER_SLAVE_ID_DEFAULT;
 static comm_stats_t s_stats_disp;
 
@@ -122,16 +120,6 @@ static void Master_OnFinished(void)
     MB_Master_GetStats(&s_stats_disp);
 }
 
-/* execute one 0x06 demo write (also validates write path on the slave) */
-static void Master_DoDemoWrite(void)
-{
-    static uint16_t s_demo_value = 300U;
-
-    s_demo_value = (uint16_t)(300U + (s_poll_count % 20U) * 5U); /* 300..395 */
-    MB_Master_WriteSingle(s_target_slave, 0x09 /* 40010 TempLimit */,
-                          s_demo_value);
-}
-
 /*====================================================================*/
 /* mb_task body (T2)                                                   */
 /*====================================================================*/
@@ -173,16 +161,8 @@ void Master_TaskMain(void)
             if ((HAL_GetTick() - s_poll_last_ms) >= POLL_PERIOD_MS)
             {
                 s_poll_last_ms = HAL_GetTick();
-                s_poll_count++;
-                if ((s_poll_count % WRITE_EVERY_N_POLLS) == 0U)
-                {
-                    Master_DoDemoWrite();      /* write transaction */
-                }
-                else
-                {
-                    /* read temperature..status (5 regs) */
-                    MB_Master_ReadHolding(s_target_slave, 0x00, 5U);
-                }
+                /* read temperature..status (5 regs) */
+                MB_Master_ReadHolding(s_target_slave, 0x00, 5U);
             }
         }
 
