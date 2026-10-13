@@ -33,7 +33,11 @@ uint16_t Uplink_FormatTelemetry(char *b, uint16_t cap, uint8_t seq_lo,
     n += fmt_fixed(&b[n], (int32_t)GetU16BE(&f[4]), 2U);
     n += snprintf(&b[n], (size_t)(cap - (uint16_t)n), ",\"curr\":");
     n += fmt_fixed(&b[n], (int32_t)GetU16BE(&f[6]), 2U);
-    n += snprintf(&b[n], (size_t)(cap - (uint16_t)n), "}");
+    /* NOTE (2026-10-13 fix): the JSON object is left OPEN on purpose.
+     * The live uplink path appends adc1/mcu_t/vref and then closes it; the
+     * backfill rebuild closes it itself.  The closing brace used to be emitted
+     * here, which made the live payload "{...},"adc1":...}" - invalid JSON
+     * that the MQTT bridge rejected, so telemetry never reached MQTT. */
     return (uint16_t)n;
 }
 

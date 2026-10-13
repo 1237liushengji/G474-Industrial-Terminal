@@ -70,8 +70,19 @@ static uint16_t Backfill_Rebuild(const log_pending_t *p, char *b, uint16_t cap)
     switch (p->type)
     {
         case 1U:
-            return Uplink_FormatTelemetry(b, cap, p->seq_lo,
-                                          p->ts / 1000U, p->fields);
+        {
+            /* Uplink_FormatTelemetry leaves the JSON object open (the live
+             * path appends extended fields); the rebuilt record carries only
+             * the cached four values, so close the object here. */
+            uint16_t m = Uplink_FormatTelemetry(b, cap, p->seq_lo,
+                                                p->ts / 1000U, p->fields);
+            if ((m != 0U) && ((uint32_t)m + 1U <= (uint32_t)cap))
+            {
+                b[m] = '}';
+                m = (uint16_t)(m + 1U);
+            }
+            return m;
+        }
         case 2U:
             return Uplink_FormatStatus(b, cap, p->ts / 1000U, p->fields);
         case 3U:

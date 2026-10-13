@@ -126,7 +126,18 @@ def main():
                               args.node_suffix)
         else:
             import serial                          # lazy: stdin mode needs none
-            with serial.Serial(args.port, args.baud, timeout=0.5) as ser:
+            # Silent open (docs/迁移说明 §18.6): preset DTR/RTS before open so
+            # the CH340 one-key-download circuit does NOT hold the board in
+            # reset while the port is open.  A plain Serial(port, ...) leaves
+            # RTS asserted and the board silent (0 bytes) for the whole session.
+            ser = serial.Serial()
+            ser.port = args.port
+            ser.baudrate = args.baud
+            ser.timeout = 0.5
+            ser.dtr = False
+            ser.rts = False
+            ser.open()
+            with ser:
                 print("[info] shadow gateway on %s @%u -> mqtt://%s:%u"
                       % (args.port, args.baud, args.broker, args.mqtt_port))
                 while not _stop:
