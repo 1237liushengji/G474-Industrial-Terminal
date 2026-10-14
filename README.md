@@ -144,3 +144,7 @@ A-06 及 485 直读腿按"未持有硬件"留白）；上板验收期间修复 9
   板载 CH340 一键下载电路的 DTR→BOOT0 脉冲不再能把芯片带入系统 bootloader
   （此前表现为"打开串口即静默/CPU 进 bootloader"）。**副作用**：串口 ISP 下载
   （FlyMcu/硬件 BOOT0）失效，烧录统一走 ST-Link；如需恢复：`-ob nSWBOOT0=1`。
+
+## 许可
+
+[MIT](LICENSE)。
