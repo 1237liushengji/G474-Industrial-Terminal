@@ -221,16 +221,20 @@
 /* LPUART uses 256x oversampling: BRR = 256*PCLK/baud (esp_at.c branches on
  * this flag).  LPUART1 clock source = PCLK1 (CCIPR reset default). */
 #define ESP_UART_IS_LPUART       1
-/* Wi-Fi credentials for M2 (device-side uplink).  The PC side runs a 2.4 GHz
- * hotspot with these credentials; keep the strings short (AT+CWJAP line). */
+/* Wi-Fi credentials for M2 (device-side uplink; the PC side runs a 2.4 GHz
+ * hotspot in the lab).  Placeholders only - NEVER commit real credentials:
+ * set the actual SSID/password locally before a deployment build.  Keep the
+ * strings short (they go into one AT+CWJAP line). */
 #define ESP_WIFI_SSID            "YOUR_SSID"
 #define ESP_WIFI_PASSWORD        "YOUR_PASSWORD"
 
 /* 5. Console - USART1 on PA9(TX) / PA10(RX), AF7                            */
 /*==========================================================================*/
-/* There is NO on-board USB-UART bridge.  PA9/PA10 are broken out to J1 pin
- * 11/12 and also to J4 (2x4 debug header shared with SWD).  An external
- * USB-TTL adapter is required. */
+/* Both boards carry an on-board CH340K USB-UART bridge wired to USART1
+ * (silk "USB转串口", see docs/迁移说明 §17); PA9/PA10 also break out to J1
+ * pin 11/12 and J4 (2x4 debug header shared with SWD).  Serial tools must
+ * open the port with dtr/rts=False (silent open, §19.3) - a default open
+ * holds the board in reset while the port is open. */
 #define CONSOLE_UART_PERIPH      USART1
 #define CONSOLE_UART_IRQn        USART1_IRQn
 #define CONSOLE_UART_IRQHandler  USART1_IRQHandler
