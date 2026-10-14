@@ -22,6 +22,10 @@ __pycache__/
 *.pyc
 Tools/python/results/
 
+# ===== 日志 / 临时捕获 =====
+*.log
+*.bin
+
 # ===== Node =====
 node_modules/
 

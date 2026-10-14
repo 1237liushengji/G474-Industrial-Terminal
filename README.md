@@ -125,7 +125,7 @@ MDK-ARM/    G474.uvprojx（4 Target）+ build_check.log
 
 **v1.0 已收口并打 tag**（2026-10-14）：14 项判据全部实机执行（10 项全绿 + A-07/A-08 限制记录 +
 A-06 及 485 直读腿按"未持有硬件"留白）；上板验收期间修复 9 个实机缺陷；24h 泡机通过。
-代码仓库：`https://github.com/1237liushengji/g474-industrial-terminal`（私有）。
+代码仓库：`https://github.com/1237liushengji/G474-Industrial-Terminal`（公开）。
 
 **留作后续的增强项（不阻塞 v1.0）**：
 1. 购入 USB-RS485 后补 A-06 双路比对与 A-05/A-11 的 485 直读腿（工具已就绪）；
